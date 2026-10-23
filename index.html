@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Costeo de Importaciones — A&T</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --border:#e0e4e9; --text:#1c2531; --muted:#6b7686;
+    --brand:#0f5c47; --brand-dark:#0a4536; --accent:#2f7ed8;
+    --danger:#c0392b; --ok:#1f8a4c; --warn:#c07a1f;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
+  a{color:var(--accent);}
+  #login-view{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:32px;width:100%;max-width:380px;box-shadow:0 2px 10px rgba(0,0,0,.05);}
+  .login-box h1{font-size:20px;margin:0 0 4px;color:var(--brand-dark);}
+  .login-box p.sub{color:var(--muted);font-size:13px;margin:0 0 24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;font-size:14px;background:#fff;color:var(--text);font-family:inherit;}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent);}
+  button{cursor:pointer;font-family:inherit;}
+  .btn{background:var(--brand);color:#fff;border:none;padding:9px 16px;border-radius:7px;font-size:14px;font-weight:600;}
+  .btn:hover{background:var(--brand-dark);}
+  .btn.secondary{background:#fff;color:var(--text);border:1px solid var(--border);}
+  .btn.secondary:hover{background:#f0f2f4;}
+  .btn.danger{background:#fff;color:var(--danger);border:1px solid #f0c4be;}
+  .btn.danger:hover{background:#fdecea;}
+  .btn.small{padding:5px 10px;font-size:12.5px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  #error-msg{color:var(--danger);font-size:13px;margin-top:10px;min-height:16px;}
+
+  #app-view{display:none;min-height:100vh;}
+  header.topbar{background:var(--brand);color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  header.topbar .title{font-weight:700;font-size:16px;}
+  header.topbar .who{font-size:12.5px;opacity:.9;}
+  header.topbar .who b{opacity:1;}
+  nav.tabs{display:flex;gap:4px;background:#0d4f3d;padding:0 16px;overflow-x:auto;}
+  nav.tabs button{background:transparent;border:none;color:#dfe9e5;padding:12px 14px;font-size:13.5px;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap;}
+  nav.tabs button.active{color:#fff;border-bottom-color:#fff;}
+  nav.tabs button:hover{color:#fff;}
+  main{padding:20px;max-width:1200px;margin:0 auto;}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+  .panel h2{margin:0 0 4px;font-size:16px;}
+  .panel h3{margin:0 0 4px;font-size:14.5px;}
+  .panel .desc{color:var(--muted);font-size:12.5px;margin:0 0 14px;}
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--border);}
+  td{padding:8px 8px;border-bottom:1px solid #eef1f4;vertical-align:top;}
+  tr:hover td{background:#fafbfc;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;}
+  .pill.ok{background:#e6f5ea;color:var(--ok);}
+  .pill.warn{background:#fbf1e0;color:var(--warn);}
+  .pill.muted{background:#eef0f2;color:var(--muted);}
+  .pill.danger{background:#fbe9e7;color:var(--danger);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  @media (max-width:640px){.grid2,.grid3{grid-template-columns:1fr;}}
+  .form-actions{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
+  .empty{color:var(--muted);font-size:13px;padding:20px 0;text-align:center;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(15,25,20,.45);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;z-index:50;}
+  .modal{background:#fff;border-radius:var(--radius);padding:22px;max-width:560px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.2);}
+  .modal h3{margin:0 0 14px;font-size:16px;}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+  .kpi{background:#f7f9fa;border:1px solid var(--border);border-radius:8px;padding:12px;}
+  .kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .kpi .val{font-size:19px;font-weight:700;margin-top:2px;}
+  .val.neg{color:var(--danger);}
+  .val.pos{color:var(--ok);}
+  .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .filter-bar select{width:auto;min-width:160px;}
+  footer.foot{text-align:center;color:var(--muted);font-size:11.5px;padding:24px 0;}
+  .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;font-weight:600;margin-bottom:12px;background:none;border:none;padding:0;}
+  .back-link:hover{color:var(--text);}
+  .subblock{border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;background:#fbfcfc;}
+  .subblock-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login-view">
+  <div class="login-box">
+    <h1>Costeo de Importaciones</h1>
+    <p class="sub">Accounting And Tax — control de gastos, anticipos y diferencia en cambio</p>
+    <div class="field">
+      <label>Correo</label>
+      <input type="email" id="login-email" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="login-password" autocomplete="current-password">
+    </div>
+    <button class="btn" id="login-btn" style="width:100%">Iniciar sesión</button>
+    <div id="error-msg"></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app-view">
+  <header class="topbar">
+    <div class="title">Costeo de Importaciones</div>
+    <div class="who">
+      <b id="who-name"></b> · <span id="who-role"></span>
+      &nbsp;·&nbsp;<a href="#" id="logout-link" style="color:#fff;text-decoration:underline;">salir</a>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs"></nav>
+  <main id="main"></main>
+  <footer class="foot">Accounting And Tax (A&T) — herramienta interna de costeo de importaciones</footer>
+</div>
+
+<div id="modal-root"></div>
+
+<script>
+/* =========================================================================
+   CONFIGURACIÓN FIREBASE
+   Reemplaza este objeto con la configuración de TU proyecto Firebase
+   (Firebase Console → Configuración del proyecto → tus apps → SDK setup).
+   Ver SETUP.md para el paso a paso.
+========================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAOo1IIk3xijQ_pamO823v3Pxx63HLsPqE",
+  authDomain: "legalizacion-de-importaciones.firebaseapp.com",
+  projectId: "legalizacion-de-importaciones",
+  storageBucket: "legalizacion-de-importaciones.firebasestorage.app",
+  messagingSenderId: "1048898997495",
+  appId: "1:1048898997495:web:982b34eecb9eee262b57f2"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* =========================================================================
+   ESTADO GLOBAL
+========================================================================= */
+const state = {
+  user: null,
+  perfil: null,
+  tab: 'importaciones',
+  clientes: [],
+  terceros: [],
+  importaciones: [],
+  facturas: [],
+  items: [],
+  anticipos: [],
+  gastos: [],
+  reportFilterClienteId: '',
+  detailImportacionId: null,
+  listeners: []
+};
+
+const CATEGORIAS_GASTO = [
+  ['flete','Flete internacional'],
+  ['seguro','Seguro de transporte'],
+  ['arancel','Arancel / gravamen'],
+  ['iva','IVA importación'],
+  ['agenciamiento','Agenciamiento aduanero'],
+  ['transporte_nacional','Transporte nacional'],
+  ['otros','Otros gastos'],
+];
+const TIPOS_TERCERO = [
+  ['proveedor','Proveedor extranjero'],
+  ['agente_aduana','Agencia de aduanas'],
+  ['transportador','Transportador / naviera'],
+  ['aseguradora','Aseguradora'],
+  ['banco','Banco / entidad financiera'],
+  ['otro','Otro'],
+];
+const MEDIOS_TRANSPORTE = [
+  ['maritimo','Marítimo'],
+  ['aereo','Aéreo'],
+  ['terrestre','Terrestre'],
+  ['multimodal','Multimodal'],
+];
+// Numerales cambiarios de importación de bienes más usados (Banco de la República, DCIN-83 Anexo 3).
+// Se sugieren como referencia; confírmalos con el IMC (banco) al momento de radicar la declaración de cambio.
+const NUMERALES_CAMBIARIOS = [
+  ['2017','2017 · Pago anticipado de futuras importaciones (antes del embarque)'],
+  ['2015','2015 · Giro por importación ya embarcada (plazo ≤ 1 mes)'],
+  ['2022','2022 · Importación embarcada, financiada por el proveedor (1–12 meses)'],
+  ['2023','2023 · Importación embarcada, financiada por un IMC (1–12 meses)'],
+  ['2024','2024 · Importación embarcada, financiada por el proveedor (> 12 meses)'],
+  ['2025','2025 · Importación embarcada, financiada por un IMC (> 12 meses)'],
+  ['2016','2016 · Gastos de importación incluidos en la factura del proveedor (flete, seguro, comisiones)'],
+  ['2060','2060 · Pago de importación de bienes en moneda legal colombiana'],
+  ['2026','2026 · Pago de importación mediante dación en pago'],
+  ['otro','Otro / no estoy seguro — confirmar con el IMC'],
+];
+
+function fmtCOP(n){ return '$' + (Number(n)||0).toLocaleString('es-CO',{maximumFractionDigits:0}); }
+function fmtUSD(n){ return 'US$' + (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}); }
+function fmtNum(n){ return (Number(n)||0).toLocaleString('es-CO',{maximumFractionDigits:2}); }
+function fmtDate(s){ return s || '—'; }
+function byId(arr,id){ return arr.find(x=>x.id===id); }
+function esAdmin(){ return state.perfil && state.perfil.role === 'admin'; }
+function miClienteId(){ return state.perfil ? state.perfil.clienteId : null; }
+
+/* =========================================================================
+   AUTENTICACIÓN
+========================================================================= */
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('login-password').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+
+function doLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  const errEl = document.getElementById('error-msg');
+  errEl.textContent = '';
+  if(!email || !pass){ errEl.textContent = 'Ingresa correo y contraseña.'; return; }
+  auth.signInWithEmailAndPassword(email, pass).catch(err=>{
+    errEl.textContent = traducirErrorAuth(err);
+  });
+}
+
+function traducirErrorAuth(err){
+  const map = {
+    'auth/invalid-email':'Correo inválido.',
+    'auth/user-disabled':'Usuario deshabilitado.',
+    'auth/user-not-found':'No existe una cuenta con ese correo.',
+    'auth/wrong-password':'Contraseña incorrecta.',
+    'auth/invalid-credential':'Correo o contraseña incorrectos.',
+    'auth/too-many-requests':'Demasiados intentos. Intenta más tarde.'
+  };
+  return map[err.code] || ('Error al iniciar sesión: ' + err.message);
+}
+
+document.getElementById('logout-link').addEventListener('click', e=>{
+  e.preventDefault();
+  auth.signOut();
+});
+
+auth.onAuthStateChanged(async user=>{
+  clearListeners();
+  if(!user){
+    state.user = null; state.perfil = null;
+    document.getElementById('login-view').style.display = 'flex';
+    document.getElementById('app-view').style.display = 'none';
+    return;
+  }
+  state.user = user;
+  try{
+    const snap = await db.collection('usuarios').doc(user.uid).get();
+    if(!snap.exists || snap.data().activo === false){
+      document.getElementById('error-msg').textContent = 'Tu usuario no está activo. Contacta a A&T.';
+      auth.signOut();
+      return;
+    }
+    state.perfil = snap.data();
+  }catch(e){
+    document.getElementById('error-msg').textContent = 'No se pudo cargar tu perfil: ' + e.message;
+    auth.signOut();
+    return;
+  }
+  document.getElementById('login-view').style.display = 'none';
+  document.getElementById('app-view').style.display = 'block';
+  document.getElementById('who-name').textContent = state.perfil.nombre || state.user.email;
+  document.getElementById('who-role').textContent = esAdmin() ? 'A&T (administrador)' : 'Cliente';
+  buildTabs();
+  attachListeners();
+  renderTab();
+});
+
+/* =========================================================================
+   SUSCRIPCIONES A FIRESTORE (tiempo real, filtradas por rol)
+========================================================================= */
+function clearListeners(){
+  state.listeners.forEach(u=>u());
+  state.listeners = [];
+}
+
+function attachListeners(){
+  const cid = miClienteId();
+
+  if(esAdmin()){
+    state.listeners.push(db.collection('clientes').orderBy('nombre').onSnapshot(s=>{
+      state.clientes = s.docs.map(d=>({id:d.id, ...d.data()}));
+      renderTab();
+    }));
+  } else {
+    state.clientes = [];
+  }
+
+  state.listeners.push(db.collection('terceros').onSnapshot(s=>{
+    state.terceros = s.docs.map(d=>({id:d.id, ...d.data()}))
+      .filter(t=> esAdmin() || !t.clienteId || t.clienteId===cid)
+      .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+    renderTab();
+  }, e=>console.error('terceros', e)));
+
+  let qImp = db.collection('importaciones');
+  if(!esAdmin()) qImp = qImp.where('clienteId','==',cid);
+  state.listeners.push(qImp.onSnapshot(s=>{
+    state.importaciones = s.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''));
+    renderTab();
+  }, e=>console.error('importaciones', e)));
+
+  let qFac = db.collection('facturas');
+  if(!esAdmin()) qFac = qFac.where('clienteId','==',cid);
+  state.listeners.push(qFac.onSnapshot(s=>{
+    state.facturas = s.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    renderTab();
+  }, e=>console.error('facturas', e)));
+
+  let qItems = db.collection('items');
+  if(!esAdmin()) qItems = qItems.where('clienteId','==',cid);
+  state.listeners.push(qItems.onSnapshot(s=>{
+    state.items = s.docs.map(d=>({id:d.id, ...d.data()}));
+    renderTab();
+  }, e=>console.error('items', e)));
+
+  let qAnt = db.collection('anticipos');
+  if(!esAdmin()) qAnt = qAnt.where('clienteId','==',cid);
+  state.listeners.push(qAnt.onSnapshot(s=>{
+    state.anticipos = s.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    renderTab();
+  }, e=>console.error('anticipos', e)));
+
+  let qGas = db.collection('gastos');
+  if(!esAdmin()) qGas = qGas.where('clienteId','==',cid);
+  state.listeners.push(qGas.onSnapshot(s=>{
+    state.gastos = s.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    renderTab();
+  }, e=>console.error('gastos', e)));
+}
+
+/* =========================================================================
+   NAVEGACIÓN
+========================================================================= */
+function buildTabs(){
+  const tabsDef = [
+    ...(esAdmin() ? [['clientes','Clientes']] : []),
+    ['terceros','Terceros'],
+    ['importaciones','Importaciones'],
+    ['reportes','Reportes'],
+  ];
+  const nav = document.getElementById('tabs');
+  nav.innerHTML = '';
+  tabsDef.forEach(([key,label])=>{
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.dataset.tab = key;
+    b.className = state.tab===key ? 'active' : '';
+    b.addEventListener('click', ()=>{
+      state.tab = key;
+      if(key==='importaciones') state.detailImportacionId = null;
+      buildTabs(); renderTab();
+    });
+    nav.appendChild(b);
+  });
+}
+
+function renderTab(){
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  const renderers = {
+    clientes: renderClientes,
+    terceros: renderTerceros,
+    importaciones: renderImportacionesTab,
+    reportes: renderReportes,
+  };
+  (renderers[state.tab] || renderImportacionesTab)(main);
+}
+
+/* =========================================================================
+   MODAL genérico
+========================================================================= */
+function openModal(title, bodyHtml, onMount){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="modal">
+        <h3>${title}</h3>
+        <div id="modal-body">${bodyHtml}</div>
+      </div>
+    </div>`;
+  document.getElementById('modal-backdrop').addEventListener('click', e=>{
+    if(e.target.id==='modal-backdrop') closeModal();
+  });
+  if(onMount) onMount(document.getElementById('modal-body'));
+}
+function closeModal(){ document.getElementById('modal-root').innerHTML = ''; }
+
+function selectOptions(list, valueKey, labelFn, selected){
+  return list.map(item=>`<option value="${item[valueKey]}" ${item[valueKey]===selected?'selected':''}>${labelFn(item)}</option>`).join('');
+}
+
+/* =========================================================================
+   CLIENTES  (solo admin)
+========================================================================= */
+function renderClientes(main){
+  main.innerHTML = `
+    <div class="panel">
+      <div class="row-between">
+        <div><h2>Clientes</h2><p class="desc">Empresas importadoras que usan la plataforma.</p></div>
+        <button class="btn" id="btn-nuevo-cliente">+ Nuevo cliente</button>
+      </div>
+      <table>
+        <thead><tr><th>Nombre</th><th>NIT</th><th>Contacto</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="tbl-clientes"></tbody>
+      </table>
+      ${state.clientes.length===0 ? '<div class="empty">Aún no hay clientes registrados.</div>' : ''}
+    </div>`;
+  document.getElementById('btn-nuevo-cliente').addEventListener('click', ()=>formCliente());
+  const tbody = document.getElementById('tbl-clientes');
+  state.clientes.forEach(c=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${c.nombre||''}</td>
+      <td>${c.nit||''}</td>
+      <td>${c.contacto||''} ${c.email?('· '+c.email):''}</td>
+      <td>${c.activo===false?'<span class="pill muted">Inactivo</span>':'<span class="pill ok">Activo</span>'}</td>
+      <td><button class="btn secondary small" data-edit>Editar</button></td>`;
+    tr.querySelector('[data-edit]').addEventListener('click', ()=>formCliente(c));
+    tbody.appendChild(tr);
+  });
+}
+
+function formCliente(c){
+  const isEdit = !!c;
+  openModal(isEdit?'Editar cliente':'Nuevo cliente', `
+    <div class="field"><label>Nombre / razón social</label><input id="f-nombre" value="${c?.nombre||''}"></div>
+    <div class="grid2">
+      <div class="field"><label>NIT</label><input id="f-nit" value="${c?.nit||''}"></div>
+      <div class="field"><label>Contacto</label><input id="f-contacto" value="${c?.contacto||''}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Teléfono</label><input id="f-telefono" value="${c?.telefono||''}"></div>
+      <div class="field"><label>Correo</label><input id="f-email" value="${c?.email||''}"></div>
+    </div>
+    <div class="field"><label>Estado</label>
+      <select id="f-activo"><option value="true" ${c?.activo!==false?'selected':''}>Activo</option><option value="false" ${c?.activo===false?'selected':''}>Inactivo</option></select>
+    </div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const data = {
+          nombre: body.querySelector('#f-nombre').value.trim(),
+          nit: body.querySelector('#f-nit').value.trim(),
+          contacto: body.querySelector('#f-contacto').value.trim(),
+          telefono: body.querySelector('#f-telefono').value.trim(),
+          email: body.querySelector('#f-email').value.trim(),
+          activo: body.querySelector('#f-activo').value === 'true',
+        };
+        if(!data.nombre){ alert('El nombre es obligatorio.'); return; }
+        try{
+          if(isEdit) await db.collection('clientes').doc(c.id).update(data);
+          else await db.collection('clientes').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* =========================================================================
+   TERCEROS
+========================================================================= */
+function renderTerceros(main){
+  main.innerHTML = `
+    <div class="panel">
+      <div class="row-between">
+        <div><h2>Terceros</h2><p class="desc">Proveedores, agencias de aduana, transportadoras, aseguradoras y bancos involucrados en las importaciones.</p></div>
+        <button class="btn" id="btn-nuevo-tercero">+ Nuevo tercero</button>
+      </div>
+      <table>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>País</th><th>NIT / Tax ID</th><th>Alcance</th><th></th></tr></thead>
+        <tbody id="tbl-terceros"></tbody>
+      </table>
+      ${state.terceros.length===0 ? '<div class="empty">Aún no hay terceros registrados.</div>' : ''}
+    </div>`;
+  document.getElementById('btn-nuevo-tercero').addEventListener('click', ()=>formTercero());
+  const tbody = document.getElementById('tbl-terceros');
+  state.terceros.forEach(t=>{
+    const tr = document.createElement('tr');
+    const tipoLabel = (TIPOS_TERCERO.find(x=>x[0]===t.tipo)||[,t.tipo])[1];
+    const cliente = t.clienteId ? byId(state.clientes, t.clienteId) : null;
+    tr.innerHTML = `
+      <td>${t.nombre||''}</td>
+      <td>${tipoLabel||''}</td>
+      <td>${t.pais||''}</td>
+      <td>${t.nit||''}</td>
+      <td>${t.clienteId ? ('<span class="pill muted">Exclusivo'+(cliente?': '+cliente.nombre:'')+'</span>') : '<span class="pill ok">Compartido</span>'}</td>
+      <td><button class="btn secondary small" data-edit>Editar</button></td>`;
+    tr.querySelector('[data-edit]').addEventListener('click', ()=>formTercero(t));
+    tbody.appendChild(tr);
+  });
+}
+
+function formTercero(t){
+  const isEdit = !!t;
+  const clienteOptions = esAdmin()
+    ? `<option value="">— Compartido (todos los clientes) —</option>` + selectOptions(state.clientes,'id',c=>c.nombre, t?.clienteId)
+    : '';
+  openModal(isEdit?'Editar tercero':'Nuevo tercero', `
+    <div class="field"><label>Nombre</label><input id="f-nombre" value="${t?.nombre||''}"></div>
+    <div class="grid2">
+      <div class="field"><label>Tipo</label><select id="f-tipo">${selectOptions(TIPOS_TERCERO.map(([v,l])=>({v,l})),'v',x=>x.l, t?.tipo||'proveedor')}</select></div>
+      <div class="field"><label>País</label><input id="f-pais" value="${t?.pais||''}"></div>
+    </div>
+    <div class="field"><label>NIT / Tax ID</label><input id="f-nit" value="${t?.nit||''}"></div>
+    ${esAdmin() ? `<div class="field"><label>Alcance</label><select id="f-clienteId">${clienteOptions}</select><div class="hint">Deja "Compartido" si este tercero (ej. una naviera) trabaja con varios clientes.</div></div>` : ''}
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const data = {
+          nombre: body.querySelector('#f-nombre').value.trim(),
+          tipo: body.querySelector('#f-tipo').value,
+          pais: body.querySelector('#f-pais').value.trim(),
+          nit: body.querySelector('#f-nit').value.trim(),
+          clienteId: esAdmin() ? (body.querySelector('#f-clienteId').value || null) : miClienteId(),
+        };
+        if(!data.nombre){ alert('El nombre es obligatorio.'); return; }
+        try{
+          if(isEdit) await db.collection('terceros').doc(t.id).update(data);
+          else await db.collection('terceros').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* =========================================================================
+   CÁLCULOS DERIVADOS (facturas, ítems, saldos, costeo, nacionalización)
+========================================================================= */
+function itemValorTotalUsd(it){ return (Number(it.cantidad)||0) * (Number(it.valorUnitarioUsd)||0); }
+function facturaItems(facturaId){ return state.items.filter(i=>i.facturaId===facturaId); }
+function facturaValorTotalUsd(facturaId){ return facturaItems(facturaId).reduce((s,i)=>s+itemValorTotalUsd(i),0); }
+function facturaAnticipos(facturaId){ return state.anticipos.filter(a=>a.facturaId===facturaId); }
+function facturaMontoUsdAnticipado(facturaId){ return facturaAnticipos(facturaId).reduce((s,a)=>s+(Number(a.montoUsd)||0),0); }
+function facturaMontoCopAnticipado(facturaId){ return facturaAnticipos(facturaId).reduce((s,a)=>s+(Number(a.montoUsd)||0)*(Number(a.trm)||0),0); }
+function facturaSaldoUsd(facturaId){ return facturaValorTotalUsd(facturaId) - facturaMontoUsdAnticipado(facturaId); }
+
+function importacionFacturas(impId){ return state.facturas.filter(f=>f.importacionId===impId); }
+function importacionItems(impId){ return state.items.filter(i=>i.importacionId===impId); }
+function importacionGastos(impId){ return state.gastos.filter(g=>g.importacionId===impId); }
+function importacionAnticipos(impId){ return state.anticipos.filter(a=>a.importacionId===impId); }
+
+function totalGastosCop(impId){ return importacionGastos(impId).reduce((s,g)=>s+(Number(g.montoCop)||0),0); }
+function totalUsdBienes(impId){ return importacionItems(impId).reduce((s,i)=>s+itemValorTotalUsd(i),0); }
+function totalUsdAnticipadoBienes(impId){ return importacionAnticipos(impId).reduce((s,a)=>s+(Number(a.montoUsd)||0),0); }
+function totalCopAnticipadoBienes(impId){ return importacionAnticipos(impId).reduce((s,a)=>s+(Number(a.montoUsd)||0)*(Number(a.trm)||0),0); }
+
+function calcularNacionalizacion(impId, trmNac){
+  const items = importacionItems(impId);
+  const totalUsd = totalUsdBienes(impId);
+  const usdAnticipado = totalUsdAnticipadoBienes(impId);
+  const copAnticipado = totalCopAnticipadoBienes(impId);
+  const saldoPendienteUsd = Math.max(0, totalUsd - usdAnticipado);
+  const costoBienesCop = copAnticipado + saldoPendienteUsd*trmNac;
+  const corrBienesCop = (usdAnticipado*trmNac) - copAnticipado;
+  const gastosCop = totalGastosCop(impId);
+  const costoTotalCop = costoBienesCop + gastosCop;
+  const itemsCalc = items.map(it=>{
+    const valorUsd = itemValorTotalUsd(it);
+    const prop = totalUsd>0 ? valorUsd/totalUsd : 0;
+    const costoBienesItem = prop*costoBienesCop;
+    const costoGastosItem = prop*gastosCop;
+    const costoTotalItem = costoBienesItem+costoGastosItem;
+    const costoUnitItem = it.cantidad ? costoTotalItem/Number(it.cantidad) : null;
+    return { id: it.id, costoBienesCop: costoBienesItem, costoGastosCop: costoGastosItem, costoTotalCop: costoTotalItem, costoUnitarioCop: costoUnitItem };
+  });
+  return { totalUsd, usdAnticipado, copAnticipado, saldoPendienteUsd, costoBienesCop, corrBienesCop, gastosCop, costoTotalCop, itemsCalc };
+}
+
+/* =========================================================================
+   IMPORTACIONES — lista
+========================================================================= */
+function renderImportacionesTab(main){
+  if(state.detailImportacionId){
+    const imp = byId(state.importaciones, state.detailImportacionId);
+    if(imp) return renderImportacionDetalle(main, imp);
+    state.detailImportacionId = null;
+  }
+  main.innerHTML = `
+    <div class="panel">
+      <div class="row-between">
+        <div><h2>Importaciones</h2><p class="desc">Cada importación agrupa sus facturas, ítems, anticipos y gastos.</p></div>
+        <button class="btn" id="btn-nueva-imp">+ Nueva importación</button>
+      </div>
+      <table>
+        <thead><tr>
+          ${esAdmin()?'<th>Cliente</th>':''}
+          <th>Referencia</th><th>Descripción</th><th>Estado</th><th>Inicio</th><th>Valor bienes (USD)</th><th>Costo total (COP)</th><th></th>
+        </tr></thead>
+        <tbody id="tbl-imp"></tbody>
+      </table>
+      ${state.importaciones.length===0 ? '<div class="empty">Aún no hay importaciones registradas.</div>' : ''}
+    </div>`;
+  document.getElementById('btn-nueva-imp').addEventListener('click', ()=>formImportacion());
+  const tbody = document.getElementById('tbl-imp');
+  state.importaciones.forEach(imp=>{
+    const cliente = byId(state.clientes, imp.clienteId);
+    const estadoPill = {en_transito:'warn', nacionalizada:'ok', cerrada:'muted'}[imp.estado] || 'muted';
+    const estadoLabel = {en_transito:'En tránsito', nacionalizada:'Nacionalizada', cerrada:'Cerrada'}[imp.estado] || imp.estado;
+    const costoTotal = imp.estado==='nacionalizada' ? (imp.costoTotalCop||0) : (totalCopAnticipadoBienes(imp.id) + totalGastosCop(imp.id));
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      ${esAdmin()?`<td>${cliente?.nombre||'—'}</td>`:''}
+      <td><b>${imp.referencia||''}</b></td>
+      <td>${imp.descripcion||''}</td>
+      <td><span class="pill ${estadoPill}">${estadoLabel}</span></td>
+      <td>${fmtDate(imp.fechaInicio)}</td>
+      <td class="num">${fmtUSD(totalUsdBienes(imp.id))}</td>
+      <td class="num">${fmtCOP(costoTotal)}</td>
+      <td><button class="btn secondary small" data-ver>Ver detalle</button></td>`;
+    tr.querySelector('[data-ver]').addEventListener('click', ()=>{ state.detailImportacionId = imp.id; renderTab(); });
+    tbody.appendChild(tr);
+  });
+}
+
+function formImportacion(imp){
+  const isEdit = !!imp;
+  const clienteField = esAdmin()
+    ? `<div class="field"><label>Cliente</label><select id="f-clienteId">${selectOptions(state.clientes,'id',c=>c.nombre, imp?.clienteId)}</select></div>`
+    : '';
+  openModal(isEdit?'Editar importación':'Nueva importación', `
+    ${clienteField}
+    <div class="field"><label>Referencia</label><input id="f-ref" value="${imp?.referencia||''}" placeholder="Ej. IMP-2026-014"></div>
+    <div class="field"><label>Descripción</label><input id="f-desc" value="${imp?.descripcion||''}" placeholder="Ej. Maquinaria industrial, 2 contenedores"></div>
+    <div class="grid3">
+      <div class="field"><label>Fecha inicio</label><input type="date" id="f-inicio" value="${imp?.fechaInicio||''}"></div>
+      <div class="field"><label>Llegada estimada</label><input type="date" id="f-llegada" value="${imp?.fechaEstimadaLlegada||''}"></div>
+      <div class="field"><label>Estado</label>
+        <select id="f-estado">
+          <option value="en_transito" ${!imp||imp?.estado==='en_transito'?'selected':''}>En tránsito</option>
+          <option value="nacionalizada" ${imp?.estado==='nacionalizada'?'selected':''} ${imp?.estado!=='nacionalizada'?'disabled':''}>Nacionalizada (usa el botón "Nacionalizar")</option>
+          <option value="cerrada" ${imp?.estado==='cerrada'?'selected':''}>Cerrada</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Notas</label><textarea id="f-notas" rows="2">${imp?.notas||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const cId = esAdmin() ? body.querySelector('#f-clienteId').value : miClienteId();
+        const data = {
+          clienteId: cId,
+          referencia: body.querySelector('#f-ref').value.trim(),
+          descripcion: body.querySelector('#f-desc').value.trim(),
+          fechaInicio: body.querySelector('#f-inicio').value,
+          fechaEstimadaLlegada: body.querySelector('#f-llegada').value,
+          estado: isEdit ? imp.estado : 'en_transito',
+          notas: body.querySelector('#f-notas').value.trim(),
+        };
+        if(!cId){ alert('Selecciona un cliente.'); return; }
+        if(!data.referencia){ alert('La referencia es obligatoria.'); return; }
+        try{
+          let ref;
+          if(isEdit){ ref = imp.id; await db.collection('importaciones').doc(imp.id).update(data); }
+          else { ref = db.collection('importaciones').doc(); await ref.set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()}); ref = ref.id; }
+          closeModal();
+          if(!isEdit){ state.detailImportacionId = ref; renderTab(); }
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* =========================================================================
+   IMPORTACIONES — vista detalle (facturas/ítems, anticipos, gastos, nacionalización)
+========================================================================= */
+function renderImportacionDetalle(main, imp){
+  const cliente = byId(state.clientes, imp.clienteId);
+  const estadoPill = {en_transito:'warn', nacionalizada:'ok', cerrada:'muted'}[imp.estado] || 'muted';
+  const estadoLabel = {en_transito:'En tránsito', nacionalizada:'Nacionalizada', cerrada:'Cerrada'}[imp.estado] || imp.estado;
+
+  main.innerHTML = `
+    <button class="back-link" id="btn-volver">← Volver a importaciones</button>
+    <div class="panel">
+      <div class="row-between">
+        <div>
+          <h2>${imp.referencia} <span class="pill ${estadoPill}">${estadoLabel}</span></h2>
+          <p class="desc">${imp.descripcion||''} ${esAdmin()&&cliente?('· Cliente: '+cliente.nombre):''}</p>
+        </div>
+        <button class="btn secondary small" id="btn-editar-general">Editar datos generales</button>
+      </div>
+    </div>
+    <div class="panel" id="panel-documentos"></div>
+    <div class="panel" id="panel-facturas"></div>
+    <div class="panel" id="panel-anticipos"></div>
+    <div class="panel" id="panel-gastos"></div>
+    <div class="panel" id="panel-nacionalizacion"></div>
+  `;
+  document.getElementById('btn-volver').addEventListener('click', ()=>{ state.detailImportacionId = null; renderTab(); });
+  document.getElementById('btn-editar-general').addEventListener('click', ()=>formImportacion(imp));
+
+  renderPanelDocumentos(document.getElementById('panel-documentos'), imp);
+  renderPanelFacturas(document.getElementById('panel-facturas'), imp);
+  renderPanelAnticipos(document.getElementById('panel-anticipos'), imp);
+  renderPanelGastos(document.getElementById('panel-gastos'), imp);
+  renderPanelNacionalizacion(document.getElementById('panel-nacionalizacion'), imp);
+}
+
+/* ---------- Documentos y datos para el reporte cambiario / Banco de la República ---------- */
+function renderPanelDocumentos(panel, imp){
+  const camposFaltantes = ['blNumero','numeroDeclaracionImportacion','paisOrigen','medioTransporte'].filter(k=>!imp[k]);
+  panel.innerHTML = `
+    <div class="row-between">
+      <div><h3>Documentos y datos cambiarios</h3><p class="desc">Soportes que suelen pedirse para justificar la operación ante la DIAN y el Banco de la República (además de la factura y los anticipos, ya registrados arriba).</p></div>
+      <button class="btn secondary small" id="btn-editar-docs">Editar</button>
+    </div>
+    ${camposFaltantes.length>0 ? `<div class="hint" style="margin-bottom:8px;">Faltan por diligenciar: ${camposFaltantes.map(k=>({blNumero:'BL/AWB', numeroDeclaracionImportacion:'N° declaración de importación', paisOrigen:'país de origen', medioTransporte:'medio de transporte'})[k]).join(', ')}.</div>` : ''}
+    <div class="grid2">
+      <div>
+        <div class="hint"><b>BL / AWB / Carta de porte</b></div>
+        <div>${imp.blNumero||'—'} ${imp.blFecha?('· '+fmtDate(imp.blFecha)):''}</div>
+      </div>
+      <div>
+        <div class="hint"><b>Medio de transporte</b></div>
+        <div>${imp.medioTransporte ? (MEDIOS_TRANSPORTE.find(x=>x[0]===imp.medioTransporte)||[,imp.medioTransporte])[1] : '—'}</div>
+      </div>
+      <div>
+        <div class="hint"><b>País de origen / procedencia</b></div>
+        <div>${imp.paisOrigen||'—'} ${imp.paisProcedencia?(' / '+imp.paisProcedencia):''}</div>
+      </div>
+      <div>
+        <div class="hint"><b>Puerto de embarque / llegada</b></div>
+        <div>${imp.puertoEmbarque||'—'} ${imp.puertoLlegada?(' → '+imp.puertoLlegada):''}</div>
+      </div>
+      <div>
+        <div class="hint"><b>N° declaración de importación (DIAN, casilla 132)</b></div>
+        <div>${imp.numeroDeclaracionImportacion||'—'}</div>
+      </div>
+      <div>
+        <div class="hint"><b>Fecha de levante</b></div>
+        <div>${fmtDate(imp.fechaLevante)}</div>
+      </div>
+    </div>
+  `;
+  panel.querySelector('#btn-editar-docs').addEventListener('click', ()=>formDocumentosImportacion(imp));
+}
+
+function formDocumentosImportacion(imp){
+  openModal('Documentos y datos cambiarios', `
+    <div class="grid2">
+      <div class="field"><label>Número de BL / AWB / carta de porte</label><input id="f-bl" value="${imp.blNumero||''}"></div>
+      <div class="field"><label>Fecha del BL/AWB</label><input type="date" id="f-blfecha" value="${imp.blFecha||''}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Medio de transporte</label><select id="f-medio">${selectOptions(MEDIOS_TRANSPORTE.map(([v,l])=>({v,l})),'v',x=>x.l, imp.medioTransporte||'maritimo')}</select></div>
+      <div class="field"><label>Fecha de levante (DIAN)</label><input type="date" id="f-levante" value="${imp.fechaLevante||''}"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>País de origen</label><input id="f-paisorigen" value="${imp.paisOrigen||''}" placeholder="Donde se fabricó el bien"></div>
+      <div class="field"><label>País de procedencia</label><input id="f-paisprocedencia" value="${imp.paisProcedencia||''}" placeholder="Desde donde se embarcó"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Puerto/aeropuerto de embarque</label><input id="f-puertoembarque" value="${imp.puertoEmbarque||''}"></div>
+      <div class="field"><label>Puerto/aeropuerto de llegada</label><input id="f-puertollegada" value="${imp.puertoLlegada||''}"></div>
+    </div>
+    <div class="field"><label>Número de declaración de importación (DIAN, casilla 132)</label><input id="f-decl-imp" value="${imp.numeroDeclaracionImportacion||''}"></div>
+    <div class="hint">El número de factura ya se registra en cada factura (sección de arriba); el IMC, el numeral cambiario y el número de la declaración de cambio se registran en cada anticipo/giro.</div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const data = {
+          blNumero: body.querySelector('#f-bl').value.trim(),
+          blFecha: body.querySelector('#f-blfecha').value,
+          medioTransporte: body.querySelector('#f-medio').value,
+          fechaLevante: body.querySelector('#f-levante').value,
+          paisOrigen: body.querySelector('#f-paisorigen').value.trim(),
+          paisProcedencia: body.querySelector('#f-paisprocedencia').value.trim(),
+          puertoEmbarque: body.querySelector('#f-puertoembarque').value.trim(),
+          puertoLlegada: body.querySelector('#f-puertollegada').value.trim(),
+          numeroDeclaracionImportacion: body.querySelector('#f-decl-imp').value.trim(),
+        };
+        try{
+          await db.collection('importaciones').doc(imp.id).update(data);
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* ---------- Facturas e ítems ---------- */
+function renderPanelFacturas(panel, imp){
+  const facturas = importacionFacturas(imp.id);
+  panel.innerHTML = `
+    <div class="row-between">
+      <div><h3>Facturas del proveedor e ítems</h3><p class="desc">Cada factura proforma/comercial agrupa los ítems comprados; el saldo se calcula según los anticipos aplicados.</p></div>
+      <button class="btn small" id="btn-nueva-factura">+ Nueva factura</button>
+    </div>
+    <div id="lista-facturas"></div>
+    ${facturas.length===0?'<div class="empty">Aún no hay facturas registradas para esta importación.</div>':''}
+  `;
+  panel.querySelector('#btn-nueva-factura').addEventListener('click', ()=>formFactura(imp));
+  const cont = panel.querySelector('#lista-facturas');
+  facturas.forEach(f=>{
+    const prov = byId(state.terceros, f.terceroId);
+    const items = facturaItems(f.id);
+    const valorTotal = facturaValorTotalUsd(f.id);
+    const saldo = facturaSaldoUsd(f.id);
+    const saldoPill = saldo<=1e-6 ? 'ok' : (saldo<valorTotal ? 'warn' : 'muted');
+    const block = document.createElement('div');
+    block.className = 'subblock';
+    block.innerHTML = `
+      <div class="subblock-head">
+        <div><b>${f.numero||'(sin número)'}</b> — ${prov?.nombre||'—'} · ${fmtDate(f.fecha)}</div>
+        <div>
+          <span class="pill ${saldoPill}">Saldo: ${fmtUSD(saldo)} de ${fmtUSD(valorTotal)}</span>
+          <button class="btn secondary small" data-editar-factura>Editar</button>
+          <button class="btn secondary small" data-nuevo-item>+ Ítem</button>
+        </div>
+      </div>
+      <table style="margin-top:8px;">
+        <thead><tr><th>Descripción</th><th>Cant.</th><th>Unidad</th><th class="num">Valor unit. USD</th><th class="num">Valor total USD</th>
+          ${imp.estado==='nacionalizada'?'<th class="num">Costo unit. COP</th>':''}
+        <th></th></tr></thead>
+        <tbody>
+          ${items.length===0 ? `<tr><td colspan="7" class="empty">Sin ítems aún</td></tr>` : items.map(it=>`
+            <tr>
+              <td>${it.descripcion||''}</td>
+              <td class="num">${fmtNum(it.cantidad)}</td>
+              <td>${it.unidadMedida||''}</td>
+              <td class="num">${fmtUSD(it.valorUnitarioUsd)}</td>
+              <td class="num">${fmtUSD(itemValorTotalUsd(it))}</td>
+              ${imp.estado==='nacionalizada'?`<td class="num">${it.costoUnitarioCop!=null?fmtCOP(it.costoUnitarioCop):'—'}</td>`:''}
+              <td><button class="btn secondary small" data-editar-item="${it.id}">Editar</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+    block.querySelector('[data-editar-factura]').addEventListener('click', ()=>formFactura(imp, f));
+    block.querySelector('[data-nuevo-item]').addEventListener('click', ()=>formItem(imp, f));
+    items.forEach(it=>{
+      const btn = block.querySelector(`[data-editar-item="${it.id}"]`);
+      if(btn) btn.addEventListener('click', ()=>formItem(imp, f, it));
+    });
+    cont.appendChild(block);
+  });
+}
+
+function formFactura(imp, f){
+  const isEdit = !!f;
+  openModal(isEdit?'Editar factura':'Nueva factura', `
+    <div class="grid2">
+      <div class="field"><label>Proveedor</label><select id="f-tercero">${selectOptions(state.terceros.filter(t=>t.tipo==='proveedor'),'id',t=>t.nombre, f?.terceroId)}</select></div>
+      <div class="field"><label>Número de factura</label><input id="f-numero" value="${f?.numero||''}" placeholder="Ej. PI-00231"></div>
+    </div>
+    <div class="field"><label>Fecha</label><input type="date" id="f-fecha" value="${f?.fecha||''}"></div>
+    <div class="field"><label>Notas</label><textarea id="f-notas" rows="2">${f?.notas||''}</textarea></div>
+    <div class="hint">Los ítems (con sus valores en USD) se agregan después de guardar la factura, desde el botón "+ Ítem".</div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        if(!body.querySelector('#f-tercero').value){ alert('Selecciona el proveedor.'); return; }
+        const data = {
+          clienteId: imp.clienteId,
+          importacionId: imp.id,
+          terceroId: body.querySelector('#f-tercero').value,
+          numero: body.querySelector('#f-numero').value.trim(),
+          fecha: body.querySelector('#f-fecha').value,
+          notas: body.querySelector('#f-notas').value.trim(),
+        };
+        try{
+          if(isEdit) await db.collection('facturas').doc(f.id).update(data);
+          else await db.collection('facturas').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+function formItem(imp, f, it){
+  const isEdit = !!it;
+  openModal(isEdit?'Editar ítem':'Nuevo ítem de la factura', `
+    <div class="field"><label>Descripción</label><input id="f-desc" value="${it?.descripcion||''}"></div>
+    <div class="grid3">
+      <div class="field"><label>Cantidad</label><input type="number" step="any" id="f-cant" value="${it?.cantidad??''}"></div>
+      <div class="field"><label>Unidad</label><input id="f-unidad" value="${it?.unidadMedida||''}" placeholder="Ej. unidades, kg"></div>
+      <div class="field"><label>Valor unitario (USD)</label><input type="number" step="any" id="f-valorunit" value="${it?.valorUnitarioUsd??''}"></div>
+    </div>
+    <div class="hint" id="preview-total"></div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      const updatePreview = ()=>{
+        const cant = Number(body.querySelector('#f-cant').value)||0;
+        const vu = Number(body.querySelector('#f-valorunit').value)||0;
+        body.querySelector('#preview-total').textContent = 'Valor total del ítem: ' + fmtUSD(cant*vu);
+      };
+      body.querySelector('#f-cant').addEventListener('input', updatePreview);
+      body.querySelector('#f-valorunit').addEventListener('input', updatePreview);
+      updatePreview();
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const data = {
+          clienteId: imp.clienteId,
+          importacionId: imp.id,
+          facturaId: f.id,
+          descripcion: body.querySelector('#f-desc').value.trim(),
+          cantidad: Number(body.querySelector('#f-cant').value),
+          unidadMedida: body.querySelector('#f-unidad').value.trim(),
+          valorUnitarioUsd: Number(body.querySelector('#f-valorunit').value),
+        };
+        if(!data.descripcion){ alert('La descripción es obligatoria.'); return; }
+        if(!data.cantidad || !data.valorUnitarioUsd){ alert('Cantidad y valor unitario deben ser mayores a cero.'); return; }
+        try{
+          if(isEdit) await db.collection('items').doc(it.id).update(data);
+          else await db.collection('items').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* ---------- Anticipos ---------- */
+function renderPanelAnticipos(panel, imp){
+  const facturas = importacionFacturas(imp.id);
+  const anticipos = importacionAnticipos(imp.id);
+  panel.innerHTML = `
+    <div class="row-between">
+      <div><h3>Anticipos</h3><p class="desc">Anticipos entregados al proveedor contra una factura específica, con la TRM del día y los datos del giro cambiario (IMC, numeral, declaración de cambio) para el reporte al Banco de la República.</p></div>
+      <button class="btn small" id="btn-nuevo-anticipo" ${facturas.length===0?'disabled title="Crea primero una factura"':''}>+ Nuevo anticipo</button>
+    </div>
+    <table>
+      <thead><tr><th>Factura</th><th>Fecha</th><th class="num">Monto USD</th><th class="num">TRM</th><th class="num">Monto COP</th><th>IMC / Banco</th><th>Numeral</th><th>Decl. cambio</th><th></th></tr></thead>
+      <tbody id="tbl-ant"></tbody>
+    </table>
+    ${anticipos.length===0?'<div class="empty">Aún no hay anticipos registrados.</div>':''}
+  `;
+  panel.querySelector('#btn-nuevo-anticipo').addEventListener('click', ()=>formAnticipo(imp));
+  const tbody = panel.querySelector('#tbl-ant');
+  anticipos.forEach(a=>{
+    const f = byId(state.facturas, a.facturaId);
+    const numeralLabel = a.numeralCambiario ? (NUMERALES_CAMBIARIOS.find(x=>x[0]===a.numeralCambiario)||[,a.numeralCambiario])[1] : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${f?.numero||'—'}</td>
+      <td>${fmtDate(a.fecha)}</td>
+      <td class="num">${fmtUSD(a.montoUsd)}</td>
+      <td class="num">${a.trm}</td>
+      <td class="num">${fmtCOP((a.montoUsd||0)*(a.trm||0))}</td>
+      <td>${a.imcBanco||'—'}</td>
+      <td title="${numeralLabel}">${a.numeralCambiario||'—'}</td>
+      <td>${a.numeroDeclaracionCambio||'—'}</td>
+      <td><button class="btn secondary small" data-editar>Editar</button></td>`;
+    tr.querySelector('[data-editar]').addEventListener('click', ()=>formAnticipo(imp, a));
+    tbody.appendChild(tr);
+  });
+}
+
+function formAnticipo(imp, a){
+  const isEdit = !!a;
+  const facturas = importacionFacturas(imp.id);
+  openModal(isEdit?'Editar anticipo':'Nuevo anticipo', `
+    <div class="field"><label>Factura</label><select id="f-factura">${selectOptions(facturas,'id',f=>`${f.numero||'(sin número)'} — saldo ${fmtUSD(facturaSaldoUsd(f.id) + (isEdit&&a.facturaId===f.id?a.montoUsd:0))}`, a?.facturaId)}</select></div>
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" id="f-fecha" value="${a?.fecha||''}"></div>
+      <div class="field"><label>Monto (USD)</label><input type="number" step="any" id="f-monto" value="${a?.montoUsd??''}"></div>
+    </div>
+    <div class="field"><label>TRM del día</label><input type="number" step="any" id="f-trm" value="${a?.trm??''}"></div>
+    <div class="hint" id="preview-cop"></div>
+    <div class="panel" style="background:#f7f9fa;padding:12px;margin:12px 0 0;">
+      <h3 style="margin-bottom:8px;">Datos del giro cambiario <span class="hint">(para el reporte al Banco de la República)</span></h3>
+      <div class="grid2">
+        <div class="field"><label>IMC / Banco que hace el giro</label><input id="f-imc" value="${a?.imcBanco||''}" placeholder="Ej. Bancolombia, Banco de Bogotá..."></div>
+        <div class="field"><label>Número de declaración de cambio</label><input id="f-decl-cambio" value="${a?.numeroDeclaracionCambio||''}" placeholder="Se llena cuando el banco la radique"></div>
+      </div>
+      <div class="field"><label>Numeral cambiario</label><select id="f-numeral">${selectOptions(NUMERALES_CAMBIARIOS.map(([v,l])=>({v,l})),'v',x=>x.l, a?.numeralCambiario||'2017')}</select></div>
+    </div>
+    <div class="field" style="margin-top:12px;"><label>Notas</label><textarea id="f-notas" rows="2">${a?.notas||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      const updatePreview = ()=>{
+        const m = Number(body.querySelector('#f-monto').value)||0;
+        const trm = Number(body.querySelector('#f-trm').value)||0;
+        body.querySelector('#preview-cop').textContent = 'Equivalente: ' + fmtCOP(m*trm);
+      };
+      body.querySelector('#f-monto').addEventListener('input', updatePreview);
+      body.querySelector('#f-trm').addEventListener('input', updatePreview);
+      updatePreview();
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const facturaId = body.querySelector('#f-factura').value;
+        const montoUsd = Number(body.querySelector('#f-monto').value);
+        const trm = Number(body.querySelector('#f-trm').value);
+        if(!facturaId){ alert('Selecciona la factura.'); return; }
+        if(!montoUsd || !trm){ alert('Monto y TRM deben ser mayores a cero.'); return; }
+        const f = byId(state.facturas, facturaId);
+        const data = {
+          clienteId: imp.clienteId,
+          importacionId: imp.id,
+          facturaId,
+          terceroId: f?.terceroId||null,
+          fecha: body.querySelector('#f-fecha').value,
+          montoUsd, trm,
+          imcBanco: body.querySelector('#f-imc').value.trim(),
+          numeroDeclaracionCambio: body.querySelector('#f-decl-cambio').value.trim(),
+          numeralCambiario: body.querySelector('#f-numeral').value,
+          notas: body.querySelector('#f-notas').value.trim(),
+        };
+        try{
+          if(isEdit) await db.collection('anticipos').doc(a.id).update(data);
+          else await db.collection('anticipos').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* ---------- Gastos ---------- */
+function renderPanelGastos(panel, imp){
+  const gastos = importacionGastos(imp.id);
+  panel.innerHTML = `
+    <div class="row-between">
+      <div><h3>Gastos</h3><p class="desc">Gastos adjudicados a esta importación (flete, seguro, arancel, agenciamiento, etc.). Se prorratean entre los ítems al nacionalizar.</p></div>
+      <button class="btn small" id="btn-nuevo-gasto">+ Nuevo gasto</button>
+    </div>
+    <table>
+      <thead><tr><th>Categoría</th><th>Tercero</th><th>Fecha</th><th class="num">Monto</th><th class="num">Monto COP</th><th></th></tr></thead>
+      <tbody id="tbl-gas"></tbody>
+    </table>
+    ${gastos.length===0?'<div class="empty">Aún no hay gastos registrados para esta importación.</div>':''}
+    <div class="hint" style="margin-top:8px;"><b>Total gastos: ${fmtCOP(totalGastosCop(imp.id))}</b></div>
+  `;
+  panel.querySelector('#btn-nuevo-gasto').addEventListener('click', ()=>formGasto(imp));
+  const tbody = panel.querySelector('#tbl-gas');
+  gastos.forEach(g=>{
+    const t = byId(state.terceros, g.terceroId);
+    const catLabel = (CATEGORIAS_GASTO.find(x=>x[0]===g.categoria)||[,g.categoria])[1];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${catLabel||''}</td>
+      <td>${t?.nombre||'—'}</td>
+      <td>${fmtDate(g.fecha)}</td>
+      <td class="num">${g.moneda==='USD'?fmtUSD(g.montoUsd):fmtCOP(g.montoCop)}</td>
+      <td class="num">${fmtCOP(g.montoCop)}</td>
+      <td><button class="btn secondary small" data-editar>Editar</button></td>`;
+    tr.querySelector('[data-editar]').addEventListener('click', ()=>formGasto(imp, g));
+    tbody.appendChild(tr);
+  });
+}
+
+function formGasto(imp, g){
+  const isEdit = !!g;
+  openModal(isEdit?'Editar gasto':'Nuevo gasto', `
+    <div class="grid2">
+      <div class="field"><label>Categoría</label><select id="f-cat">${selectOptions(CATEGORIAS_GASTO.map(([v,l])=>({v,l})),'v',x=>x.l, g?.categoria||'flete')}</select></div>
+      <div class="field"><label>Tercero</label><select id="f-tercero">${selectOptions(state.terceros.filter(t=>!t.clienteId||t.clienteId===imp.clienteId),'id',t=>t.nombre, g?.terceroId)}</select></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" id="f-fecha" value="${g?.fecha||''}"></div>
+      <div class="field"><label>Moneda</label><select id="f-moneda"><option value="USD" ${g?.moneda!=='COP'?'selected':''}>USD</option><option value="COP" ${g?.moneda==='COP'?'selected':''}>COP</option></select></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Monto</label><input type="number" step="any" id="f-monto" value="${g?.moneda==='COP'?(g?.montoCop??''):(g?.montoUsd??'')}"></div>
+      <div class="field" id="wrap-trm"><label>TRM del día</label><input type="number" step="any" id="f-trm" value="${g?.trm??''}"></div>
+    </div>
+    <div class="hint" id="preview-cop"></div>
+    <div class="field"><label>Notas</label><textarea id="f-notas" rows="2">${g?.notas||''}</textarea></div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Guardar</button>
+    </div>`, body=>{
+      const wrapTrm = body.querySelector('#wrap-trm');
+      const updatePreview = ()=>{
+        const moneda = body.querySelector('#f-moneda').value;
+        wrapTrm.style.display = moneda==='USD' ? '' : 'none';
+        const monto = Number(body.querySelector('#f-monto').value)||0;
+        const trm = Number(body.querySelector('#f-trm').value)||0;
+        const cop = moneda==='USD' ? monto*trm : monto;
+        body.querySelector('#preview-cop').textContent = 'Monto en COP: ' + fmtCOP(cop);
+      };
+      body.querySelector('#f-moneda').addEventListener('change', updatePreview);
+      body.querySelector('#f-monto').addEventListener('input', updatePreview);
+      body.querySelector('#f-trm').addEventListener('input', updatePreview);
+      updatePreview();
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const moneda = body.querySelector('#f-moneda').value;
+        const monto = Number(body.querySelector('#f-monto').value);
+        const trm = Number(body.querySelector('#f-trm').value);
+        if(!body.querySelector('#f-tercero').value){ alert('Selecciona el tercero.'); return; }
+        if(!monto){ alert('El monto debe ser mayor a cero.'); return; }
+        if(moneda==='USD' && !trm){ alert('Ingresa la TRM del día.'); return; }
+        const data = {
+          clienteId: imp.clienteId,
+          importacionId: imp.id,
+          terceroId: body.querySelector('#f-tercero').value,
+          categoria: body.querySelector('#f-cat').value,
+          fecha: body.querySelector('#f-fecha').value,
+          moneda,
+          montoUsd: moneda==='USD' ? monto : null,
+          trm: moneda==='USD' ? trm : null,
+          montoCop: moneda==='USD' ? monto*trm : monto,
+          notas: body.querySelector('#f-notas').value.trim(),
+        };
+        try{
+          if(isEdit) await db.collection('gastos').doc(g.id).update(data);
+          else await db.collection('gastos').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
+          closeModal();
+        }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* ---------- Nacionalización ---------- */
+function renderPanelNacionalizacion(panel, imp){
+  const nacionalizada = imp.estado==='nacionalizada';
+  const items = importacionItems(imp.id);
+  if(!nacionalizada){
+    panel.innerHTML = `
+      <h3>Nacionalización</h3>
+      <p class="desc">Cuando nacionalices, se toma la TRM del día para calcular la corrección monetaria de los bienes y se dispersan los costos (bienes + gastos) entre cada ítem, en proporción a su valor.</p>
+      <button class="btn" id="btn-nacionalizar" ${items.length===0?'disabled title="Agrega al menos un ítem primero"':''}>Nacionalizar esta importación</button>
+    `;
+    panel.querySelector('#btn-nacionalizar')?.addEventListener('click', ()=>formNacionalizar(imp));
+  } else {
+    const calc = calcularNacionalizacion(imp.id, imp.trmNacionalizacion);
+    panel.innerHTML = `
+      <div class="row-between">
+        <h3>Nacionalización</h3>
+        <button class="btn secondary small" id="btn-renacionalizar">Recalcular nacionalización</button>
+      </div>
+      <p class="desc">Nacionalizada el ${fmtDate(imp.fechaNacionalizacion)} a TRM ${imp.trmNacionalizacion}.</p>
+      <div class="kpis">
+        <div class="kpi"><div class="lbl">Costo de los bienes</div><div class="val">${fmtCOP(imp.costoBienesCop)}</div></div>
+        <div class="kpi"><div class="lbl">Corrección monetaria (bienes)</div><div class="val ${imp.corrBienesCop>0?'neg':imp.corrBienesCop<0?'pos':''}">${fmtCOP(imp.corrBienesCop)}</div></div>
+        <div class="kpi"><div class="lbl">Gastos asociados</div><div class="val">${fmtCOP(imp.costoGastosCop)}</div></div>
+        <div class="kpi"><div class="lbl">Costo total importación</div><div class="val">${fmtCOP(imp.costoTotalCop)}</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Ítem</th><th class="num">Valor USD</th><th class="num">Costo bienes COP</th><th class="num">Costo gastos COP</th><th class="num">Costo total COP</th><th class="num">Costo unitario COP</th></tr></thead>
+        <tbody>
+          ${items.map(it=>`
+            <tr>
+              <td>${it.descripcion}</td>
+              <td class="num">${fmtUSD(itemValorTotalUsd(it))}</td>
+              <td class="num">${it.costoBienesCop!=null?fmtCOP(it.costoBienesCop):'—'}</td>
+              <td class="num">${it.costoGastosCop!=null?fmtCOP(it.costoGastosCop):'—'}</td>
+              <td class="num">${it.costoTotalCop!=null?fmtCOP(it.costoTotalCop):'—'}</td>
+              <td class="num">${it.costoUnitarioCop!=null?fmtCOP(it.costoUnitarioCop):'—'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    `;
+    panel.querySelector('#btn-renacionalizar').addEventListener('click', ()=>formNacionalizar(imp));
+  }
+}
+
+function formNacionalizar(imp){
+  openModal('Nacionalizar importación', `
+    <div class="grid2">
+      <div class="field"><label>Fecha de nacionalización</label><input type="date" id="f-fecha" value="${imp.fechaNacionalizacion||''}"></div>
+      <div class="field"><label>TRM del día</label><input type="number" step="any" id="f-trm" value="${imp.trmNacionalizacion??''}"></div>
+    </div>
+    <div id="preview-nac" style="margin-top:10px;"></div>
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">Nacionalizar y calcular</button>
+    </div>`, body=>{
+      const updatePreview = ()=>{
+        const trm = Number(body.querySelector('#f-trm').value)||0;
+        if(!trm){ body.querySelector('#preview-nac').innerHTML = ''; return; }
+        const calc = calcularNacionalizacion(imp.id, trm);
+        body.querySelector('#preview-nac').innerHTML = `
+          <div class="kpis">
+            <div class="kpi"><div class="lbl">Costo bienes</div><div class="val">${fmtCOP(calc.costoBienesCop)}</div></div>
+            <div class="kpi"><div class="lbl">Corrección monetaria</div><div class="val ${calc.corrBienesCop>0?'neg':calc.corrBienesCop<0?'pos':''}">${fmtCOP(calc.corrBienesCop)}</div></div>
+            <div class="kpi"><div class="lbl">Gastos</div><div class="val">${fmtCOP(calc.gastosCop)}</div></div>
+            <div class="kpi"><div class="lbl">Costo total</div><div class="val">${fmtCOP(calc.costoTotalCop)}</div></div>
+          </div>
+          ${calc.saldoPendienteUsd>1e-6?`<div class="hint">Hay ${fmtUSD(calc.saldoPendienteUsd)} de la factura sin anticipar; se valora a la TRM de nacionalización.</div>`:''}
+        `;
+      };
+      body.querySelector('#f-trm').addEventListener('input', updatePreview);
+      updatePreview();
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const fecha = body.querySelector('#f-fecha').value;
+        const trm = Number(body.querySelector('#f-trm').value);
+        if(!fecha || !trm){ alert('Completa la fecha y la TRM.'); return; }
+        const calc = calcularNacionalizacion(imp.id, trm);
+        try{
+          const batch = db.batch();
+          batch.update(db.collection('importaciones').doc(imp.id), {
+            estado: 'nacionalizada',
+            fechaNacionalizacion: fecha,
+            trmNacionalizacion: trm,
+            costoBienesCop: calc.costoBienesCop,
+            corrBienesCop: calc.corrBienesCop,
+            costoGastosCop: calc.gastosCop,
+            costoTotalCop: calc.costoTotalCop,
+          });
+          calc.itemsCalc.forEach(ic=>{
+            batch.update(db.collection('items').doc(ic.id), {
+              costoBienesCop: ic.costoBienesCop,
+              costoGastosCop: ic.costoGastosCop,
+              costoTotalCop: ic.costoTotalCop,
+              costoUnitarioCop: ic.costoUnitarioCop,
+            });
+          });
+          await batch.commit();
+          closeModal();
+        }catch(e){ alert('Error al nacionalizar: '+e.message); }
+      });
+    });
+}
+
+/* =========================================================================
+   REPORTES
+========================================================================= */
+function resumenTercero(terceroId, clienteId){
+  const facturas = state.facturas.filter(f=>f.terceroId===terceroId && (!clienteId||f.clienteId===clienteId));
+  const facturaIds = facturas.map(f=>f.id);
+  const anticipos = state.anticipos.filter(a=>facturaIds.includes(a.facturaId));
+  const gastos = state.gastos.filter(g=>g.terceroId===terceroId && (!clienteId||g.clienteId===clienteId));
+  const totalFacturadoUsd = facturas.reduce((s,f)=>s+facturaValorTotalUsd(f.id),0);
+  const totalAnticipadoUsd = anticipos.reduce((s,a)=>s+(Number(a.montoUsd)||0),0);
+  const totalAnticipadoCop = anticipos.reduce((s,a)=>s+(Number(a.montoUsd)||0)*(Number(a.trm)||0),0);
+  const saldoPendienteUsd = totalFacturadoUsd - totalAnticipadoUsd;
+  const totalGastosCopT = gastos.reduce((s,g)=>s+(Number(g.montoCop)||0),0);
+  return { totalFacturadoUsd, totalAnticipadoUsd, totalAnticipadoCop, saldoPendienteUsd, totalGastosCopT };
+}
+
+function renderReportes(main){
+  const clientesFiltro = esAdmin() ? state.clientes : [];
+  main.innerHTML = `
+    <div class="panel">
+      <h2>Reporte por importación</h2>
+      <p class="desc">Costeo total y, si ya está nacionalizada, el costo unitario de cada ítem.</p>
+      ${esAdmin() ? `<div class="filter-bar"><select id="f-cliente-rep-imp"><option value="">Todos los clientes</option>${selectOptions(clientesFiltro,'id',c=>c.nombre,state.reportFilterClienteId)}</select></div>` : ''}
+      <div id="rep-importaciones"></div>
+    </div>
+    <div class="panel">
+      <h2>Reporte por tercero</h2>
+      <p class="desc">Facturado, anticipado, saldo pendiente y gastos por tercero.</p>
+      <div id="rep-terceros"></div>
+    </div>`;
+
+  if(esAdmin()){
+    document.getElementById('f-cliente-rep-imp').addEventListener('change', e=>{
+      state.reportFilterClienteId = e.target.value;
+      renderTab();
+    });
+  }
+
+  const impsFiltradas = state.importaciones.filter(i=> !state.reportFilterClienteId || i.clienteId===state.reportFilterClienteId);
+  const repImp = document.getElementById('rep-importaciones');
+  if(impsFiltradas.length===0){
+    repImp.innerHTML = '<div class="empty">No hay importaciones para mostrar.</div>';
+  } else {
+    repImp.innerHTML = impsFiltradas.map(imp=>{
+      const cliente = byId(state.clientes, imp.clienteId);
+      const items = importacionItems(imp.id);
+      const nacionalizada = imp.estado==='nacionalizada';
+      const costoTotal = nacionalizada ? imp.costoTotalCop : (totalCopAnticipadoBienes(imp.id)+totalGastosCop(imp.id));
+      const itemRows = items.length===0 ? '<tr><td colspan="3" class="empty">Sin ítems</td></tr>' : items.map(it=>`
+        <tr><td>${it.descripcion}</td><td class="num">${fmtNum(it.cantidad)}</td><td class="num">${nacionalizada&&it.costoUnitarioCop!=null?fmtCOP(it.costoUnitarioCop):'—'}</td></tr>
+      `).join('');
+      return `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div class="row-between" style="margin-bottom:10px;">
+            <div><b>${imp.referencia}</b> — ${imp.descripcion||''} ${esAdmin()?('· '+(cliente?.nombre||'')):''}</div>
+            <span class="pill ${nacionalizada?'ok':'warn'}">${nacionalizada?'Nacionalizada':'En proceso'}</span>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><div class="lbl">Costo total</div><div class="val">${fmtCOP(costoTotal)}</div></div>
+            ${nacionalizada?`<div class="kpi"><div class="lbl">Corrección monetaria</div><div class="val ${imp.corrBienesCop>0?'neg':imp.corrBienesCop<0?'pos':''}">${fmtCOP(imp.corrBienesCop)}</div></div>`:''}
+            <div class="kpi"><div class="lbl">Gastos</div><div class="val">${fmtCOP(totalGastosCop(imp.id))}</div></div>
+          </div>
+          <table><thead><tr><th>Ítem</th><th class="num">Cantidad</th><th class="num">Costo unitario COP</th></tr></thead><tbody>${itemRows}</tbody></table>
+        </div>`;
+    }).join('');
+  }
+
+  const terceroIds = [...new Set([
+    ...state.facturas.filter(f=>!state.reportFilterClienteId||f.clienteId===state.reportFilterClienteId).map(f=>f.terceroId),
+    ...state.gastos.filter(g=>!state.reportFilterClienteId||g.clienteId===state.reportFilterClienteId).map(g=>g.terceroId)
+  ])];
+  const repTer = document.getElementById('rep-terceros');
+  if(terceroIds.length===0){
+    repTer.innerHTML = '<div class="empty">No hay movimientos con terceros todavía.</div>';
+  } else {
+    repTer.innerHTML = `
+      <table>
+        <thead><tr><th>Tercero</th><th class="num">Facturado (USD)</th><th class="num">Anticipado (USD)</th><th class="num">Saldo pendiente (USD)</th><th class="num">Gastos (COP)</th></tr></thead>
+        <tbody>
+          ${terceroIds.map(tid=>{
+            const t = byId(state.terceros, tid);
+            const r = resumenTercero(tid, state.reportFilterClienteId||null);
+            return `<tr>
+              <td>${t?.nombre||'—'}</td>
+              <td class="num">${fmtUSD(r.totalFacturadoUsd)}</td>
+              <td class="num">${fmtUSD(r.totalAnticipadoUsd)}</td>
+              <td class="num">${fmtUSD(r.saldoPendienteUsd)}</td>
+              <td class="num">${fmtCOP(r.totalGastosCopT)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+}
+</script>
+</body>
+</html>
