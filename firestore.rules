@@ -1,0 +1,104 @@
+rules_version = '2';
+
+// Reglas de seguridad — Costeo de Importaciones (A&T)
+// Roles: admin (A&T) ve y edita todo. cliente solo ve/edita su propia data (clienteId).
+// El rol de cada usuario se guarda en /usuarios/{uid}; esa coleccion solo se
+// gestiona manualmente desde la consola de Firebase (ver SETUP.md).
+
+service cloud.firestore {
+match /databases/{database}/documents {
+
+function isSignedIn() {
+return request.auth != null;
+}
+
+function usuario() {
+return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+}
+
+function isAdmin() {
+return isSignedIn()
+&& exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+&& usuario().role == 'admin'
+&& usuario().activo == true;
+}
+
+function isCliente() {
+return isSignedIn()
+&& exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+&& usuario().role == 'cliente'
+&& usuario().activo == true;
+}
+
+function miClienteId() {
+return usuario().clienteId;
+}
+
+// Cada usuario solo puede leer su propio documento de perfil.
+// La escritura se hace manualmente desde la consola (no hay autoservicio de registro).
+match /usuarios/{uid} {
+allow read: if isSignedIn() && request.auth.uid == uid;
+allow write: if false;
+}
+
+match /clientes/{id} {
+allow read: if isAdmin() || (isCliente() && miClienteId() == id);
+allow write: if isAdmin();
+}
+
+match /terceros/{id} {
+allow read: if isAdmin()
+|| (isCliente() && (resource.data.clienteId == null || resource.data.clienteId == miClienteId()));
+allow create: if isAdmin()
+|| (isCliente() && request.resource.data.clienteId == miClienteId());
+allow update: if isAdmin()
+|| (isCliente() && resource.data.clienteId == miClienteId() && request.resource.data.clienteId == miClienteId());
+allow delete: if isAdmin();
+}
+
+match /importaciones/{id} {
+allow read: if isAdmin() || (isCliente() && resource.data.clienteId == miClienteId());
+allow create: if isAdmin()
+|| (isCliente() && request.resource.data.clienteId == miClienteId());
+allow update: if isAdmin()
+|| (isCliente() && resource.data.clienteId == miClienteId() && request.resource.data.clienteId == miClienteId());
+allow delete: if isAdmin();
+}
+
+match /facturas/{id} {
+allow read: if isAdmin() || (isCliente() && resource.data.clienteId == miClienteId());
+allow create: if isAdmin()
+|| (isCliente() && request.resource.data.clienteId == miClienteId());
+allow update: if isAdmin()
+|| (isCliente() && resource.data.clienteId == miClienteId() && request.resource.data.clienteId == miClienteId());
+allow delete: if isAdmin();
+}
+
+match /items/{id} {
+allow read: if isAdmin() || (isCliente() && resource.data.clienteId == miClienteId());
+allow create: if isAdmin()
+|| (isCliente() && request.resource.data.clienteId == miClienteId());
+allow update: if isAdmin()
+|| (isCliente() && resource.data.clienteId == miClienteId() && request.resource.data.clienteId == miClienteId());
+allow delete: if isAdmin();
+}
+
+match /anticipos/{id} {
+allow read: if isAdmin() || (isCliente() && resource.data.clienteId == miClienteId());
+allow create: if isAdmin()
+|| (isCliente() && request.resource.data.clienteId == miClienteId());
+allow update: if isAdmin()
+|| (isCliente() && resource.data.clienteId == miClienteId() && request.resource.data.clienteId == miClienteId());
+allow delete: if isAdmin();
+}
+
+match /gastos/{id} {
+allow read: if isAdmin() || (isCliente() && resource.data.clienteId == miClienteId());
+allow create: if isAdmin()
+|| (isCliente() && request.resource.data.clienteId == miClienteId());
+allow update: if isAdmin()
+|| (isCliente() && resource.data.clienteId == miClienteId() && request.resource.data.clienteId == miClienteId());
+allow delete: if isAdmin();
+}
+}
+}
