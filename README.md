@@ -4,7 +4,6 @@ Aplicativo interno de **Accounting And Tax (A&T)** para costear importaciones: r
 
 Ver [`SETUP.md`](./SETUP.md) para la guía de configuración y uso diario.
 
-- `index.html` — aplicación (Firebase Auth + Firestore)
+- `index.html` — aplicación (Firebase Auth + Firestore), publicada en GitHub Pages
 - `firestore.rules` — reglas de seguridad (ya publicadas en el proyecto de Firebase)
 - `SETUP.md` — guía paso a paso
-- `demo.html` — versión de demostración con datos de ejemplo (sin conexión real a Firebase)
