@@ -47,7 +47,19 @@ Estas reglas hacen que: los usuarios de A&T (rol `admin`) vean y editen todo, y 
 
 ## 6. Crear los primeros usuarios
 
-Como no hay registro público, cada usuario (de A&T o de un cliente) se crea así:
+### Opción A — desde la app, pestaña "Usuarios" (la más fácil)
+
+El **primer** usuario admin (el tuyo) hay que crearlo manualmente la primera vez, siguiendo la Opción B de abajo — porque todavía no hay nadie con sesión de admin para crearlo desde la app. Una vez que ese primer admin pueda entrar, **todos los demás usuarios** (tu equipo y los de cada cliente) se crean así, sin tocar la consola de Firebase:
+
+1. Entra a la app como admin y abre la pestaña **"Usuarios"**.
+2. Clic en **"+ Nuevo usuario"**.
+3. Completa nombre, correo y una contraseña temporal (mínimo 6 caracteres) — avísale al usuario que puede cambiarla después con "¿Olvidaste tu contraseña?" en el login.
+4. Elige el rol: **"A&T (administrador)"** (ve todo) o **"Cliente"** (debes elegir a qué cliente pertenece; si ese cliente aún no existe, créalo primero en la pestaña "Clientes").
+5. Clic en **"Crear usuario"**. La app crea el acceso (Firebase Authentication) y su perfil (`usuarios/{uid}` en Firestore) en un solo paso.
+
+Esto funciona sin Cloud Functions: la app usa una "app secundaria" de Firebase solo para crear el login, sin cerrar tu propia sesión de admin. Desde la misma pestaña puedes editar un usuario existente (nombre, rol, cliente, estado activo/inactivo) — el correo no se puede cambiar ahí; para eso, o para resetear una contraseña manualmente, usa Firebase Authentication directamente.
+
+### Opción B — manual, desde la consola de Firebase (para el primer admin, o como alternativa)
 
 1. En Firebase: **Authentication → Users → Agregar usuario**. Ingresa su correo y una contraseña temporal (pídele que la cambie luego desde "¿Olvidaste tu contraseña?" en el login, o cámbiala tú mismo ahí).
 2. Copia el **UID** que Firebase le asigna a ese usuario (aparece en la lista de usuarios).
@@ -71,7 +83,7 @@ Como no hay registro público, cada usuario (de A&T o de un cliente) se crea as�
    ```
    (Ese `clienteId` lo obtienes creando primero el cliente desde la app misma, en la pestaña "Clientes" — como admin — y copiando el ID de ese documento desde Firestore, o simplemente creándolo primero en la app y luego revisando su ID en la consola.)
 
-5. Repite para cada usuario que necesite entrar (tu equipo y tus clientes).
+5. Repite para cada usuario que necesite entrar.
 
 ## 7. Publicar la app (gratis)
 
@@ -103,6 +115,7 @@ Con el plan gratuito **Spark** de Firebase, Authentication y Firestore no tienen
 
 ## Uso diario (resumen para el equipo)
 
+- **Usuarios**: pestaña de A&T para crear el acceso de cada persona (correo + contraseña temporal) junto con su perfil (rol y, si es de un cliente, a cuál) en un solo paso — ver sección 6. Cualquier usuario que olvide su contraseña puede restablecerla desde "¿Olvidaste tu contraseña?" en la pantalla de login (solo funciona si ese correo ya tiene una cuenta creada).
 - **Clientes**: solo A&T las crea/edita — son las empresas importadoras que tendrán acceso.
 - **Terceros**: proveedores, agencias de aduana, transportadoras, aseguradoras, bancos. Pueden ser "compartidos" (varios clientes los usan, ej. una naviera) o "exclusivos" de un cliente.
 - **Importaciones**: el corazón de la app. Cada importación tiene una vista de detalle con todo lo demás adentro: sus facturas, anticipos, gastos y (al final) su nacionalización.
@@ -112,3 +125,4 @@ Con el plan gratuito **Spark** de Firebase, Authentication y Firestore no tienen
 - **Gastos**: flete, seguro, arancel, agenciamiento, transporte nacional, etc. Se adjudican a la importación (no a un ítem ni a un anticipo puntual); se prorratean entre los ítems solo hasta el momento de nacionalizar.
 - **Nacionalizar**: cuando llega el momento, se entra a la importación y se pulsa "Nacionalizar", ingresando la fecha y la TRM de ese día. La app calcula la corrección monetaria (diferencia en cambio) de los bienes comparando lo pagado en los anticipos contra su valor a la TRM de nacionalización, y dispersa el costo total (bienes + gastos) entre cada ítem en proporción a su valor en USD — dejando el costo unitario real de cada producto. Se puede "Recalcular" después si cambia algo.
 - **Reportes**: costeo total por importación (con el detalle de costo unitario por ítem una vez nacionalizada), y un resumen por tercero con lo facturado, anticipado, saldo pendiente y gastos.
+- 
