@@ -1197,7 +1197,8 @@ function renderPanelGastos(panel, imp){
     ${gastos.length===0?'<div class="empty">Aún no hay gastos registrados para esta importación.</div>':''}
     <div class="hint" style="margin-top:8px;"><b>Total gastos: ${fmtCOP(totalGastosCop(imp.id))}</b></div>
   `;
-  panel.querySelector('#btn-nuevo-gasto').addEventListener('click', ()=>formGasto(imp));  const tbody = panel.querySelector('#tbl-gas');
+  panel.querySelector('#btn-nuevo-gasto').addEventListener('click', ()=>formGasto(imp));
+  const tbody = panel.querySelector('#tbl-gas');
   gastos.forEach(g=>{
     const t = byId(state.terceros, g.terceroId);
     const catLabel = (CATEGORIAS_GASTO.find(x=>x[0]===g.categoria)||[,g.categoria])[1];
