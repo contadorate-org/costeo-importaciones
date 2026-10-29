@@ -103,6 +103,9 @@
       <input type="password" id="login-password" autocomplete="current-password">
     </div>
     <button class="btn" id="login-btn" style="width:100%">Iniciar sesión</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" id="forgot-link" style="font-size:12.5px;">¿Olvidaste tu contraseña?</a>
+    </div>
     <div id="error-msg"></div>
   </div>
 </div>
@@ -224,6 +227,25 @@ function doLogin(){
     errEl.textContent = traducirErrorAuth(err);
   });
 }
+
+document.getElementById('forgot-link').addEventListener('click', e=>{
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const errEl = document.getElementById('error-msg');
+  errEl.style.color = '';
+  errEl.textContent = '';
+  if(!email){
+    errEl.textContent = 'Escribe tu correo arriba y haz clic de nuevo en "¿Olvidaste tu contraseña?".';
+    return;
+  }
+  auth.sendPasswordResetEmail(email).then(()=>{
+    errEl.style.color = 'var(--ok)';
+    errEl.textContent = 'Te enviamos un correo a ' + email + ' con instrucciones para restablecer tu contraseña. Revisa también spam.';
+  }).catch(err=>{
+    errEl.style.color = '';
+    errEl.textContent = traducirErrorAuth(err);
+  });
+});
 
 function traducirErrorAuth(err){
   const map = {
