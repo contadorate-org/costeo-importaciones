@@ -154,6 +154,7 @@ const state = {
   perfil: null,
   tab: 'importaciones',
   clientes: [],
+  usuarios: [],
   terceros: [],
   importaciones: [],
   facturas: [],
@@ -254,9 +255,29 @@ function traducirErrorAuth(err){
     'auth/user-not-found':'No existe una cuenta con ese correo.',
     'auth/wrong-password':'Contraseña incorrecta.',
     'auth/invalid-credential':'Correo o contraseña incorrectos.',
-    'auth/too-many-requests':'Demasiados intentos. Intenta más tarde.'
+    'auth/too-many-requests':'Demasiados intentos. Intenta más tarde.',
+    'auth/email-already-in-use':'Ya existe un usuario con ese correo.',
+    'auth/weak-password':'La contraseña es muy débil (mínimo 6 caracteres).',
+    'auth/operation-not-allowed':'El acceso por correo/contraseña no está habilitado en Firebase.'
   };
-  return map[err.code] || ('Error al iniciar sesión: ' + err.message);
+  return map[err.code] || ('Error: ' + err.message);
+}
+
+/* =========================================================================
+   CREACIÓN DE USUARIOS (admin) — crea el login en Firebase Authentication
+   usando una app secundaria, para no cerrar la sesión del admin, y luego
+   guarda el perfil en /usuarios/{uid}. No requiere Cloud Functions.
+========================================================================= */
+async function crearUsuarioAuth(email, password){
+  const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary-' + Date.now());
+  try{
+    const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+    await secondaryApp.auth().signOut();
+    return uid;
+  } finally {
+    await secondaryApp.delete();
+  }
 }
 
 document.getElementById('logout-link').addEventListener('click', e=>{
@@ -311,8 +332,14 @@ function attachListeners(){
       state.clientes = s.docs.map(d=>({id:d.id, ...d.data()}));
       renderTab();
     }));
+    state.listeners.push(db.collection('usuarios').onSnapshot(s=>{
+      state.usuarios = s.docs.map(d=>({id:d.id, ...d.data()}))
+        .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+      renderTab();
+    }, e=>console.error('usuarios', e)));
   } else {
     state.clientes = [];
+    state.usuarios = [];
   }
 
   state.listeners.push(db.collection('terceros').onSnapshot(s=>{
@@ -367,7 +394,7 @@ function attachListeners(){
 ========================================================================= */
 function buildTabs(){
   const tabsDef = [
-    ...(esAdmin() ? [['clientes','Clientes']] : []),
+    ...(esAdmin() ? [['clientes','Clientes'],['usuarios','Usuarios']] : []),
     ['terceros','Terceros'],
     ['importaciones','Importaciones'],
     ['reportes','Reportes'],
@@ -393,6 +420,7 @@ function renderTab(){
   main.innerHTML = '';
   const renderers = {
     clientes: renderClientes,
+    usuarios: renderUsuarios,
     terceros: renderTerceros,
     importaciones: renderImportacionesTab,
     reportes: renderReportes,
@@ -489,6 +517,107 @@ function formCliente(c){
           else await db.collection('clientes').doc().set({...data, creado: firebase.firestore.FieldValue.serverTimestamp()});
           closeModal();
         }catch(e){ alert('Error al guardar: '+e.message); }
+      });
+    });
+}
+
+/* =========================================================================
+   USUARIOS  (solo admin) — crea el acceso (login + perfil) de cada persona
+   que entra a la app: tu equipo (admin) o el contacto de un cliente (cliente).
+========================================================================= */
+function renderUsuarios(main){
+  main.innerHTML = `
+    <div class="panel">
+      <div class="row-between">
+        <div><h2>Usuarios</h2><p class="desc">Quién puede entrar a la app: tu equipo (A&T) y los contactos de cada cliente. Crear un usuario aquí crea su acceso (correo + contraseña) y su perfil en un solo paso.</p></div>
+        <button class="btn" id="btn-nuevo-usuario">+ Nuevo usuario</button>
+      </div>
+      <table>
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Cliente</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="tbl-usuarios"></tbody>
+      </table>
+      ${state.usuarios.length===0 ? '<div class="empty">Aún no hay usuarios registrados.</div>' : ''}
+    </div>`;
+  document.getElementById('btn-nuevo-usuario').addEventListener('click', ()=>formUsuario());
+  const tbody = document.getElementById('tbl-usuarios');
+  state.usuarios.forEach(u=>{
+    const cliente = u.clienteId ? byId(state.clientes, u.clienteId) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${u.nombre||''}</td>
+      <td>${u.email||''}</td>
+      <td>${u.role==='admin'?'A&T (admin)':'Cliente'}</td>
+      <td>${cliente?.nombre||(u.role==='cliente'?'—':'')}</td>
+      <td>${u.activo===false?'<span class="pill muted">Inactivo</span>':'<span class="pill ok">Activo</span>'}</td>
+      <td><button class="btn secondary small" data-edit>Editar</button></td>`;
+    tr.querySelector('[data-edit]').addEventListener('click', ()=>formUsuario(u));
+    tbody.appendChild(tr);
+  });
+}
+
+function formUsuario(u){
+  const isEdit = !!u;
+  openModal(isEdit?'Editar usuario':'Nuevo usuario', `
+    <div class="field"><label>Nombre</label><input id="f-nombre" value="${u?.nombre||''}"></div>
+    <div class="field"><label>Correo</label><input type="email" id="f-correo" value="${u?.email||''}" ${isEdit?'disabled':''}></div>
+    ${!isEdit
+      ? `<div class="field"><label>Contraseña temporal</label><input type="text" id="f-clave" placeholder="Mínimo 6 caracteres"><div class="hint">Es solo para la primera entrada — el usuario puede cambiarla después con "¿Olvidaste tu contraseña?" en el login.</div></div>`
+      : `<div class="hint">El correo no se puede cambiar desde aquí. Para eso, o para resetear la contraseña manualmente, usa Firebase Authentication directamente.</div>`}
+    <div class="grid2">
+      <div class="field"><label>Rol</label>
+        <select id="f-role">
+          <option value="cliente" ${(!u||u.role==='cliente')?'selected':''}>Cliente</option>
+          <option value="admin" ${u?.role==='admin'?'selected':''}>A&T (administrador)</option>
+        </select>
+      </div>
+      <div class="field" id="wrap-cliente"><label>Cliente</label>
+        <select id="f-clienteId"><option value="">— Selecciona un cliente —</option>${selectOptions(state.clientes,'id',c=>c.nombre, u?.clienteId)}</select>
+      </div>
+    </div>
+    ${isEdit ? `<div class="field"><label>Estado</label><select id="f-activo"><option value="true" ${u?.activo!==false?'selected':''}>Activo</option><option value="false" ${u?.activo===false?'selected':''}>Inactivo</option></select></div>` : ''}
+    <div class="form-actions">
+      <button class="btn secondary" id="m-cancel">Cancelar</button>
+      <button class="btn" id="m-save">${isEdit?'Guardar':'Crear usuario'}</button>
+    </div>`, body=>{
+      const wrapCliente = body.querySelector('#wrap-cliente');
+      const roleSel = body.querySelector('#f-role');
+      const updateClienteVisibility = ()=>{ wrapCliente.style.display = roleSel.value==='cliente' ? '' : 'none'; };
+      roleSel.addEventListener('change', updateClienteVisibility);
+      updateClienteVisibility();
+      body.querySelector('#m-cancel').addEventListener('click', closeModal);
+      body.querySelector('#m-save').addEventListener('click', async ()=>{
+        const btn = body.querySelector('#m-save');
+        const nombre = body.querySelector('#f-nombre').value.trim();
+        const correo = body.querySelector('#f-correo').value.trim();
+        const role = roleSel.value;
+        const clienteId = role==='cliente' ? (body.querySelector('#f-clienteId').value||null) : null;
+        if(!nombre){ alert('El nombre es obligatorio.'); return; }
+        if(role==='cliente' && !clienteId){ alert('Selecciona el cliente. Si aún no existe, créalo primero en la pestaña Clientes.'); return; }
+        if(isEdit){
+          try{
+            await db.collection('usuarios').doc(u.id).update({
+              nombre, role, clienteId,
+              activo: body.querySelector('#f-activo').value === 'true',
+            });
+            closeModal();
+          }catch(e){ alert('Error al guardar: '+e.message); }
+        } else {
+          const clave = body.querySelector('#f-clave').value;
+          if(!correo){ alert('El correo es obligatorio.'); return; }
+          if(!clave || clave.length<6){ alert('La contraseña temporal debe tener al menos 6 caracteres.'); return; }
+          btn.disabled = true; btn.textContent = 'Creando...';
+          try{
+            const uid = await crearUsuarioAuth(correo, clave);
+            await db.collection('usuarios').doc(uid).set({
+              email: correo, nombre, role, clienteId, activo: true,
+              creado: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+            closeModal();
+          }catch(e){
+            btn.disabled = false; btn.textContent = 'Crear usuario';
+            alert('No se pudo crear el usuario: ' + traducirErrorAuth(e));
+          }
+        }
       });
     });
 }
@@ -1068,8 +1197,7 @@ function renderPanelGastos(panel, imp){
     ${gastos.length===0?'<div class="empty">Aún no hay gastos registrados para esta importación.</div>':''}
     <div class="hint" style="margin-top:8px;"><b>Total gastos: ${fmtCOP(totalGastosCop(imp.id))}</b></div>
   `;
-  panel.querySelector('#btn-nuevo-gasto').addEventListener('click', ()=>formGasto(imp));
-  const tbody = panel.querySelector('#tbl-gas');
+  panel.querySelector('#btn-nuevo-gasto').addEventListener('click', ()=>formGasto(imp));  const tbody = panel.querySelector('#tbl-gas');
   gastos.forEach(g=>{
     const t = byId(state.terceros, g.terceroId);
     const catLabel = (CATEGORIAS_GASTO.find(x=>x[0]===g.categoria)||[,g.categoria])[1];
