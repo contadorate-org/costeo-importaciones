@@ -671,10 +671,30 @@ function renderTerceros(main){
       <td>${t.pais||''}</td>
       <td>${t.nit||''}</td>
       <td>${t.clienteId ? ('<span class="pill muted">Exclusivo'+(cliente?': '+cliente.nombre:'')+'</span>') : '<span class="pill ok">Compartido</span>'}</td>
-      <td><button class="btn secondary small" data-edit>Editar</button></td>`;
+      <td>
+        <button class="btn secondary small" data-edit>Editar</button>
+        ${esAdmin() ? '<button class="btn danger small" data-eliminar>Eliminar</button>' : ''}
+      </td>`;
     tr.querySelector('[data-edit]').addEventListener('click', ()=>formTercero(t));
+    if(esAdmin()){
+      tr.querySelector('[data-eliminar]').addEventListener('click', ()=>eliminarTercero(t));
+    }
     tbody.appendChild(tr);
   });
+}
+
+function eliminarTercero(t){
+  const nFacturas = state.facturas.filter(f=>f.terceroId===t.id).length;
+  const nGastos = state.gastos.filter(g=>g.terceroId===t.id).length;
+  if(nFacturas>0 || nGastos>0){
+    const partes = [];
+    if(nFacturas>0) partes.push(nFacturas+' factura'+(nFacturas===1?'':'s'));
+    if(nGastos>0) partes.push(nGastos+' gasto'+(nGastos===1?'':'s'));
+    alert('No se puede eliminar "'+(t.nombre||'este tercero')+'" porque tiene '+partes.join(' y ')+' asociado'+((nFacturas+nGastos)===1?'':'s')+'. Reasigna o elimina esos registros primero.');
+    return;
+  }
+  if(!confirm('¿Eliminar el tercero "'+(t.nombre||'')+'"? Esta acción no se puede deshacer.')) return;
+  db.collection('terceros').doc(t.id).delete().catch(e=>alert('Error al eliminar: '+e.message));
 }
 
 function formTercero(t){
