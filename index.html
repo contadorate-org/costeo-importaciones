@@ -342,12 +342,33 @@ function attachListeners(){
     state.usuarios = [];
   }
 
-  state.listeners.push(db.collection('terceros').onSnapshot(s=>{
-    state.terceros = s.docs.map(d=>({id:d.id, ...d.data()}))
-      .filter(t=> esAdmin() || !t.clienteId || t.clienteId===cid)
-      .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
-    renderTab();
-  }, e=>console.error('terceros', e)));
+  if(esAdmin()){
+    state.listeners.push(db.collection('terceros').onSnapshot(s=>{
+      state.terceros = s.docs.map(d=>({id:d.id, ...d.data()}))
+        .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+      renderTab();
+    }, e=>console.error('terceros', e)));
+  } else {
+    // Para un cliente, la regla de seguridad exige una consulta acotada (no se puede
+    // listar la colección completa). Como un tercero puede ser propio (clienteId===cid)
+    // o compartido (clienteId===null), se hacen dos consultas filtradas y se combinan.
+    let tercerosPropios = [];
+    let tercerosCompartidos = [];
+    const mergeTerceros = ()=>{
+      const map = {};
+      [...tercerosCompartidos, ...tercerosPropios].forEach(t=>{ map[t.id] = t; });
+      state.terceros = Object.values(map).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+      renderTab();
+    };
+    state.listeners.push(db.collection('terceros').where('clienteId','==',cid).onSnapshot(s=>{
+      tercerosPropios = s.docs.map(d=>({id:d.id, ...d.data()}));
+      mergeTerceros();
+    }, e=>console.error('terceros-propios', e)));
+    state.listeners.push(db.collection('terceros').where('clienteId','==',null).onSnapshot(s=>{
+      tercerosCompartidos = s.docs.map(d=>({id:d.id, ...d.data()}));
+      mergeTerceros();
+    }, e=>console.error('terceros-compartidos', e)));
+  }
 
   let qImp = db.collection('importaciones');
   if(!esAdmin()) qImp = qImp.where('clienteId','==',cid);
