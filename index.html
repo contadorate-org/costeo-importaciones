@@ -36,6 +36,10 @@
   .btn.danger:hover{background:#fdecea;}
   .btn.small{padding:5px 10px;font-size:12.5px;}
   .btn:disabled{opacity:.5;cursor:not-allowed;}
+  details>summary{list-style:none;}
+  details>summary::-webkit-details-marker{display:none;}
+  details>summary::before{content:'▸ ';}
+  details[open]>summary::before{content:'▾ ';}
   #error-msg{color:var(--danger);font-size:13px;margin-top:10px;min-height:16px;}
 
   #app-view{display:none;min-height:100vh;}
@@ -167,14 +171,18 @@ const state = {
 };
 
 const CATEGORIAS_GASTO = [
-  ['flete','Flete internacional'],
-  ['seguro','Seguro de transporte'],
+  ['flete','Flete internacional (casilla 79 DIAN)'],
+  ['seguro','Seguro (casilla 80 DIAN)'],
   ['arancel','Arancel / gravamen'],
-  ['iva','IVA importación'],
+  ['iva','IVA importación (informativo, no se incluye en el costo)'],
   ['agenciamiento','Agenciamiento aduanero'],
   ['transporte_nacional','Transporte nacional'],
-  ['otros','Otros gastos'],
+  ['otros','Otros gastos (casilla 81 DIAN)'],
 ];
+// Categorías que forman parte del "valor en aduana" DIAN (casillas 79+80+81 = casilla 82).
+// Si se registran en USD, se revalorizan a la TRM de nacionalización (no a la TRM con la
+// que se registró el gasto) para que la base coincida con la TRM única de la declaración.
+const CATEGORIAS_VALOR_ADUANA = ['flete','seguro','otros'];
 const TIPOS_TERCERO = [
   ['proveedor','Proveedor extranjero'],
   ['agente_aduana','Agencia de aduanas'],
@@ -750,6 +758,10 @@ function importacionGastos(impId){ return state.gastos.filter(g=>g.importacionId
 function importacionAnticipos(impId){ return state.anticipos.filter(a=>a.importacionId===impId); }
 
 function totalGastosCop(impId){ return importacionGastos(impId).reduce((s,g)=>s+(Number(g.montoCop)||0),0); }
+// Igual que totalGastosCop, pero excluye IVA (el IVA pagado en la importación es descontable,
+// no es un costo del producto) — se usa para estimar el costo total antes de nacionalizar.
+function totalGastosCosteablesCop(impId){ return importacionGastos(impId).filter(g=>g.categoria!=='iva').reduce((s,g)=>s+(Number(g.montoCop)||0),0); }
+function totalGastosIvaCop(impId){ return importacionGastos(impId).filter(g=>g.categoria==='iva').reduce((s,g)=>s+(Number(g.montoCop)||0),0); }
 function totalUsdBienes(impId){ return importacionItems(impId).reduce((s,i)=>s+itemValorTotalUsd(i),0); }
 function totalUsdAnticipadoBienes(impId){ return importacionAnticipos(impId).reduce((s,a)=>s+(Number(a.montoUsd)||0),0); }
 function totalCopAnticipadoBienes(impId){ return importacionAnticipos(impId).reduce((s,a)=>s+(Number(a.montoUsd)||0)*(Number(a.trm)||0),0); }
@@ -762,8 +774,36 @@ function calcularNacionalizacion(impId, trmNac){
   const saldoPendienteUsd = Math.max(0, totalUsd - usdAnticipado);
   const costoBienesCop = copAnticipado + saldoPendienteUsd*trmNac;
   const corrBienesCop = (usdAnticipado*trmNac) - copAnticipado;
-  const gastosCop = totalGastosCop(impId);
+
+  // Gastos: el IVA queda fuera del costeo (informativo, es descontable). Flete/seguro/otros
+  // (casillas 79/80/81 DIAN, valor en aduana) registrados en USD se revalorizan a la TRM de
+  // nacionalización en vez de quedarse a la TRM con la que se registraron, para que la base
+  // use una sola TRM — igual que ya pasa con el saldo pendiente de los bienes.
+  let gastosCop = 0;
+  let gastosIvaCop = 0;
+  let corrGastosCop = 0;
+  let valorAduanaGastosCop = 0;
+  importacionGastos(impId).forEach(g=>{
+    const montoCopOriginal = Number(g.montoCop)||0;
+    if(g.categoria==='iva'){ gastosIvaCop += montoCopOriginal; return; }
+    const esValorAduana = CATEGORIAS_VALOR_ADUANA.includes(g.categoria);
+    if(esValorAduana && g.moneda==='USD'){
+      const montoCopNac = (Number(g.montoUsd)||0) * trmNac;
+      gastosCop += montoCopNac;
+      corrGastosCop += montoCopNac - montoCopOriginal;
+      valorAduanaGastosCop += montoCopNac;
+    } else {
+      gastosCop += montoCopOriginal;
+      if(esValorAduana) valorAduanaGastosCop += montoCopOriginal;
+    }
+  });
+
   const costoTotalCop = costoBienesCop + gastosCop;
+  // Base gravable estimada (ref. casilla 84 DIAN, sin el ajuste del art. 8): FOB + fletes +
+  // seguros + otros gastos, todo a la TRM de nacionalización — para cuadrar contra lo que
+  // liquidó la agencia de aduanas/DIAN. Es un apoyo, no reemplaza la declaración de importación.
+  const baseGravableCop = (totalUsd*trmNac) + valorAduanaGastosCop;
+
   const itemsCalc = items.map(it=>{
     const valorUsd = itemValorTotalUsd(it);
     const prop = totalUsd>0 ? valorUsd/totalUsd : 0;
@@ -773,7 +813,7 @@ function calcularNacionalizacion(impId, trmNac){
     const costoUnitItem = it.cantidad ? costoTotalItem/Number(it.cantidad) : null;
     return { id: it.id, costoBienesCop: costoBienesItem, costoGastosCop: costoGastosItem, costoTotalCop: costoTotalItem, costoUnitarioCop: costoUnitItem };
   });
-  return { totalUsd, usdAnticipado, copAnticipado, saldoPendienteUsd, costoBienesCop, corrBienesCop, gastosCop, costoTotalCop, itemsCalc };
+  return { totalUsd, usdAnticipado, copAnticipado, saldoPendienteUsd, costoBienesCop, corrBienesCop, gastosCop, gastosIvaCop, corrGastosCop, baseGravableCop, costoTotalCop, itemsCalc };
 }
 
 /* =========================================================================
@@ -806,7 +846,7 @@ function renderImportacionesTab(main){
     const cliente = byId(state.clientes, imp.clienteId);
     const estadoPill = {en_transito:'warn', nacionalizada:'ok', cerrada:'muted'}[imp.estado] || 'muted';
     const estadoLabel = {en_transito:'En tránsito', nacionalizada:'Nacionalizada', cerrada:'Cerrada'}[imp.estado] || imp.estado;
-    const costoTotal = imp.estado==='nacionalizada' ? (imp.costoTotalCop||0) : (totalCopAnticipadoBienes(imp.id) + totalGastosCop(imp.id));
+    const costoTotal = imp.estado==='nacionalizada' ? (imp.costoTotalCop||0) : (totalCopAnticipadoBienes(imp.id) + totalGastosCosteablesCop(imp.id));
     const tr = document.createElement('tr');
     tr.innerHTML = `
       ${esAdmin()?`<td>${cliente?.nombre||'—'}</td>`:''}
@@ -1228,7 +1268,7 @@ function renderPanelGastos(panel, imp){
   const gastos = importacionGastos(imp.id);
   panel.innerHTML = `
     <div class="row-between">
-      <div><h3>Gastos</h3><p class="desc">Gastos adjudicados a esta importación (flete, seguro, arancel, agenciamiento, etc.). Se prorratean entre los ítems al nacionalizar.</p></div>
+      <div><h3>Gastos</h3><p class="desc">Gastos adjudicados a esta importación (flete, seguro, arancel, agenciamiento, etc.). Flete/seguro/otros (casillas 79/80/81 DIAN) en USD se revalorizan a la TRM de nacionalización; el IVA queda aparte (informativo, no se costea). Se prorratean entre los ítems al nacionalizar.</p></div>
       <button class="btn small" id="btn-nuevo-gasto">+ Nuevo gasto</button>
     </div>
     <table>
@@ -1236,7 +1276,10 @@ function renderPanelGastos(panel, imp){
       <tbody id="tbl-gas"></tbody>
     </table>
     ${gastos.length===0?'<div class="empty">Aún no hay gastos registrados para esta importación.</div>':''}
-    <div class="hint" style="margin-top:8px;"><b>Total gastos: ${fmtCOP(totalGastosCop(imp.id))}</b></div>
+    <div class="hint" style="margin-top:8px;">
+      <b>Total gastos (costeables): ${fmtCOP(totalGastosCosteablesCop(imp.id))}</b>
+      ${totalGastosIvaCop(imp.id)>0?`<br>IVA pagado (informativo, no incluido arriba): ${fmtCOP(totalGastosIvaCop(imp.id))}`:''}
+    </div>
   `;
   panel.querySelector('#btn-nuevo-gasto').addEventListener('click', ()=>formGasto(imp));
   const tbody = panel.querySelector('#tbl-gas');
@@ -1326,12 +1369,11 @@ function renderPanelNacionalizacion(panel, imp){
   if(!nacionalizada){
     panel.innerHTML = `
       <h3>Nacionalización</h3>
-      <p class="desc">Cuando nacionalices, se toma la TRM del día para calcular la corrección monetaria de los bienes y se dispersan los costos (bienes + gastos) entre cada ítem, en proporción a su valor.</p>
+      <p class="desc">Cuando nacionalices, se toma la TRM del día para calcular la corrección monetaria de los bienes, flete/seguro/otros gastos en USD se revalorizan a esa misma TRM (el IVA queda aparte, no se costea), y se dispersan los costos (bienes + gastos) entre cada ítem, en proporción a su valor.</p>
       <button class="btn" id="btn-nacionalizar" ${items.length===0?'disabled title="Agrega al menos un ítem primero"':''}>Nacionalizar esta importación</button>
     `;
     panel.querySelector('#btn-nacionalizar')?.addEventListener('click', ()=>formNacionalizar(imp));
   } else {
-    const calc = calcularNacionalizacion(imp.id, imp.trmNacionalizacion);
     panel.innerHTML = `
       <div class="row-between">
         <h3>Nacionalización</h3>
@@ -1343,7 +1385,11 @@ function renderPanelNacionalizacion(panel, imp){
         <div class="kpi"><div class="lbl">Corrección monetaria (bienes)</div><div class="val ${imp.corrBienesCop>0?'neg':imp.corrBienesCop<0?'pos':''}">${fmtCOP(imp.corrBienesCop)}</div></div>
         <div class="kpi"><div class="lbl">Gastos asociados</div><div class="val">${fmtCOP(imp.costoGastosCop)}</div></div>
         <div class="kpi"><div class="lbl">Costo total importación</div><div class="val">${fmtCOP(imp.costoTotalCop)}</div></div>
+        <div class="kpi"><div class="lbl">Corrección monetaria (gastos)</div><div class="val ${(imp.corrGastosCop||0)>0?'neg':(imp.corrGastosCop||0)<0?'pos':''}">${fmtCOP(imp.corrGastosCop||0)}</div></div>
+        <div class="kpi"><div class="lbl">Base gravable estimada (valor en aduana)</div><div class="val">${fmtCOP(imp.baseGravableCop||0)}</div></div>
+        <div class="kpi"><div class="lbl">IVA pagado (informativo)</div><div class="val">${fmtCOP(imp.gastosIvaCop||0)}</div></div>
       </div>
+      <p class="hint">La base gravable estimada (bienes + flete + seguro + otros gastos, a la TRM de nacionalización) es un apoyo para cuadrar contra lo liquidado por la agencia de aduanas/DIAN — no reemplaza la declaración de importación.</p>
       <table>
         <thead><tr><th>Ítem</th><th class="num">Valor USD</th><th class="num">Costo bienes COP</th><th class="num">Costo gastos COP</th><th class="num">Costo total COP</th><th class="num">Costo unitario COP</th></tr></thead>
         <tbody>
@@ -1381,9 +1427,12 @@ function formNacionalizar(imp){
         body.querySelector('#preview-nac').innerHTML = `
           <div class="kpis">
             <div class="kpi"><div class="lbl">Costo bienes</div><div class="val">${fmtCOP(calc.costoBienesCop)}</div></div>
-            <div class="kpi"><div class="lbl">Corrección monetaria</div><div class="val ${calc.corrBienesCop>0?'neg':calc.corrBienesCop<0?'pos':''}">${fmtCOP(calc.corrBienesCop)}</div></div>
+            <div class="kpi"><div class="lbl">Corrección monetaria (bienes)</div><div class="val ${calc.corrBienesCop>0?'neg':calc.corrBienesCop<0?'pos':''}">${fmtCOP(calc.corrBienesCop)}</div></div>
             <div class="kpi"><div class="lbl">Gastos</div><div class="val">${fmtCOP(calc.gastosCop)}</div></div>
             <div class="kpi"><div class="lbl">Costo total</div><div class="val">${fmtCOP(calc.costoTotalCop)}</div></div>
+            <div class="kpi"><div class="lbl">Corrección monetaria (gastos)</div><div class="val ${calc.corrGastosCop>0?'neg':calc.corrGastosCop<0?'pos':''}">${fmtCOP(calc.corrGastosCop)}</div></div>
+            <div class="kpi"><div class="lbl">Base gravable estimada</div><div class="val">${fmtCOP(calc.baseGravableCop)}</div></div>
+            <div class="kpi"><div class="lbl">IVA pagado (informativo)</div><div class="val">${fmtCOP(calc.gastosIvaCop)}</div></div>
           </div>
           ${calc.saldoPendienteUsd>1e-6?`<div class="hint">Hay ${fmtUSD(calc.saldoPendienteUsd)} de la factura sin anticipar; se valora a la TRM de nacionalización.</div>`:''}
         `;
@@ -1406,6 +1455,9 @@ function formNacionalizar(imp){
             corrBienesCop: calc.corrBienesCop,
             costoGastosCop: calc.gastosCop,
             costoTotalCop: calc.costoTotalCop,
+            corrGastosCop: calc.corrGastosCop,
+            baseGravableCop: calc.baseGravableCop,
+            gastosIvaCop: calc.gastosIvaCop,
           });
           calc.itemsCalc.forEach(ic=>{
             batch.update(db.collection('items').doc(ic.id), {
@@ -1469,7 +1521,7 @@ function renderReportes(main){
       const cliente = byId(state.clientes, imp.clienteId);
       const items = importacionItems(imp.id);
       const nacionalizada = imp.estado==='nacionalizada';
-      const costoTotal = nacionalizada ? imp.costoTotalCop : (totalCopAnticipadoBienes(imp.id)+totalGastosCop(imp.id));
+      const costoTotal = nacionalizada ? imp.costoTotalCop : (totalCopAnticipadoBienes(imp.id)+totalGastosCosteablesCop(imp.id));
       const itemRows = items.length===0 ? '<tr><td colspan="3" class="empty">Sin ítems</td></tr>' : items.map(it=>`
         <tr><td>${it.descripcion}</td><td class="num">${fmtNum(it.cantidad)}</td><td class="num">${nacionalizada&&it.costoUnitarioCop!=null?fmtCOP(it.costoUnitarioCop):'—'}</td></tr>
       `).join('');
@@ -1481,10 +1533,15 @@ function renderReportes(main){
           </div>
           <div class="kpis">
             <div class="kpi"><div class="lbl">Costo total</div><div class="val">${fmtCOP(costoTotal)}</div></div>
-            ${nacionalizada?`<div class="kpi"><div class="lbl">Corrección monetaria</div><div class="val ${imp.corrBienesCop>0?'neg':imp.corrBienesCop<0?'pos':''}">${fmtCOP(imp.corrBienesCop)}</div></div>`:''}
-            <div class="kpi"><div class="lbl">Gastos</div><div class="val">${fmtCOP(totalGastosCop(imp.id))}</div></div>
+            ${nacionalizada?`<div class="kpi"><div class="lbl">Corrección monetaria (bienes)</div><div class="val ${imp.corrBienesCop>0?'neg':imp.corrBienesCop<0?'pos':''}">${fmtCOP(imp.corrBienesCop)}</div></div>`:''}
+            <div class="kpi"><div class="lbl">Gastos</div><div class="val">${fmtCOP(nacionalizada?imp.costoGastosCop:totalGastosCosteablesCop(imp.id))}</div></div>
+            ${nacionalizada?`<div class="kpi"><div class="lbl">Base gravable estimada</div><div class="val">${fmtCOP(imp.baseGravableCop||0)}</div></div>`:''}
+            ${nacionalizada&&(imp.gastosIvaCop||0)>0?`<div class="kpi"><div class="lbl">IVA pagado (informativo)</div><div class="val">${fmtCOP(imp.gastosIvaCop)}</div></div>`:''}
           </div>
-          <table><thead><tr><th>Ítem</th><th class="num">Cantidad</th><th class="num">Costo unitario COP</th></tr></thead><tbody>${itemRows}</tbody></table>
+          <details>
+            <summary class="btn secondary small" style="display:inline-block;cursor:pointer;">Ver detalle de ítems</summary>
+            <table style="margin-top:8px;"><thead><tr><th>Ítem</th><th class="num">Cantidad</th><th class="num">Costo unitario COP</th></tr></thead><tbody>${itemRows}</tbody></table>
+          </details>
         </div>`;
     }).join('');
   }
