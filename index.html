@@ -780,11 +780,15 @@ function calcularNacionalizacion(impId, trmNac){
   const usdAnticipado = totalUsdAnticipadoBienes(impId);
   const copAnticipado = totalCopAnticipadoBienes(impId);
   const saldoPendienteUsd = Math.max(0, totalUsd - usdAnticipado);
-  const costoBienesPurosCop = copAnticipado + saldoPendienteUsd*trmNac; // solo mercancía (sin gastos)
+  // Corrección monetaria de los bienes: diferencia entre lo que realmente costaron en pesos
+  // los anticipos ya pagados (a su TRM histórica) y lo que valdrían hoy a la TRM de
+  // nacionalización. Es puramente informativa — diferencia en cambio para contabilizar como
+  // gasto o ingreso financiero — y el costeo de la mercancía NO la incorpora: los bienes se
+  // costean siempre a una sola TRM, la de nacionalización (ver valorFobTrmUnicaCop/costoBienesCop).
   const corrBienesCop = (usdAnticipado*trmNac) - copAnticipado;
-  // Valor FOB de los bienes a una sola TRM de nacionalización (sin mezclar la TRM de cada
-  // anticipo) = costoBienesPurosCop + corrBienesCop = totalUsd*trmNac. Para comparar contra la
-  // casilla 78 (FOB) de la declaración de importación.
+  // Valor FOB de los bienes a una sola TRM de nacionalización (sin mezclar la TRM histórica de
+  // cada anticipo) = totalUsd*trmNac. Es la base del costeo de la mercancía (ver costoBienesCop
+  // abajo) y también sirve para comparar contra la casilla 78 (FOB) de la declaración de importación.
   const valorFobTrmUnicaCop = totalUsd*trmNac;
 
   // Gastos: el IVA queda fuera del costeo (informativo, es descontable). Flete/seguro/otros
@@ -813,7 +817,10 @@ function calcularNacionalizacion(impId, trmNac){
     }
   });
 
-  const costoBienesCop = costoBienesPurosCop + gastosAduanaCop; // mercancía + flete/seguro/otros aduaneros
+  // Costo de la mercancía: siempre a la TRM de nacionalización (valorFobTrmUnicaCop), sin la
+  // corrección monetaria — esa diferencia en cambio es informativa (corrBienesCop) y se
+  // contabiliza aparte como gasto/ingreso financiero, nunca como parte del costo del producto.
+  const costoBienesCop = valorFobTrmUnicaCop + gastosAduanaCop; // mercancía (a TRM única) + flete/seguro/otros aduaneros
   const costoTotalCop = costoBienesCop + gastosCop;
   // Base gravable estimada (ref. casilla 84 DIAN, sin el ajuste del art. 8): FOB + fletes +
   // seguros + otros gastos, todo a la TRM de nacionalización — para cuadrar contra lo que
@@ -1387,7 +1394,7 @@ function renderPanelNacionalizacion(panel, imp){
   if(!nacionalizada){
     panel.innerHTML = `
       <h3>Nacionalización</h3>
-      <p class="desc">Cuando nacionalices, se toma la TRM del día para calcular la corrección monetaria de los bienes. Flete/seguro/otros DIAN (casillas 79/80/81) en USD se revalorizan a esa misma TRM y se suman al costo de los bienes; los demás gastos (arancel, agenciamiento, transporte y seguro/otros nacionales) quedan aparte. El IVA no se costea. Luego se dispersan los costos (bienes + gastos nacionales) entre cada ítem, en proporción a su valor.</p>
+      <p class="desc">Cuando nacionalices, se toma la TRM del día. Los bienes se costean enteramente a esa TRM (sin importar a qué TRM se pagó cada anticipo) — la corrección monetaria resultante es solo informativa, para contabilizarla como gasto/ingreso financiero, y no entra al costo del producto. Flete/seguro/otros DIAN (casillas 79/80/81) en USD se revalorizan a esa misma TRM y se suman al costo de los bienes; los demás gastos (arancel, agenciamiento, transporte y seguro/otros nacionales) quedan aparte. El IVA no se costea. Luego se dispersan los costos (bienes + gastos nacionales) entre cada ítem, en proporción a su valor.</p>
       <button class="btn" id="btn-nacionalizar" ${items.length===0?'disabled title="Agrega al menos un ítem primero"':''}>Nacionalizar esta importación</button>
     `;
     panel.querySelector('#btn-nacionalizar')?.addEventListener('click', ()=>formNacionalizar(imp));
@@ -1408,7 +1415,7 @@ function renderPanelNacionalizacion(panel, imp){
         <div class="kpi"><div class="lbl">Base gravable estimada (valor en aduana)</div><div class="val">${fmtCOP(imp.baseGravableCop||0)}</div></div>
         <div class="kpi"><div class="lbl">IVA pagado (informativo)</div><div class="val">${fmtCOP(imp.gastosIvaCop||0)}</div></div>
       </div>
-      <p class="hint">"Costo de los bienes" ya incluye flete/seguro/otros DIAN (casillas 79/80/81). El "Valor FOB bienes (TRM única)" (sin esos gastos) es un apoyo para comparar contra la casilla 78 de la declaración de importación, y la "Base gravable estimada" (FOB + flete + seguro + otros, a la TRM de nacionalización) contra la casilla 84 — base de arancel/IVA. Ninguna reemplaza la declaración de importación.</p>
+      <p class="hint">"Costo de los bienes" se calcula siempre a la TRM de nacionalización (no a la TRM de cada anticipo) más flete/seguro/otros DIAN (casillas 79/80/81) — la "Corrección monetaria (bienes)" es informativa y NO está incluida en ese costo: es la diferencia en cambio a contabilizar como gasto/ingreso financiero. El "Valor FOB bienes (TRM única)" (sin esos gastos) es un apoyo para comparar contra la casilla 78 de la declaración de importación, y la "Base gravable estimada" (FOB + flete + seguro + otros, a la TRM de nacionalización) contra la casilla 84 — base de arancel/IVA. Ninguna reemplaza la declaración de importación.</p>
       <table>
         <thead><tr><th>Ítem</th><th class="num">Valor USD</th><th class="num">Costo bienes COP</th><th class="num">Costo gastos COP</th><th class="num">Costo total COP</th><th class="num">Costo unitario COP</th></tr></thead>
         <tbody>
