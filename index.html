@@ -1626,9 +1626,9 @@ function renderReportes(main){
               <td class="num">${fmtUSD(r.saldoPendienteUsd)}</td>
               <td class="num">${fmtCOP(r.totalGastosCopT)}</td>
             </tr>
-            ${r.porImportacion.length>1?`<tr><td colspan="5" style="padding:0 0 8px;">
+            ${r.porImportacion.length>0?`<tr><td colspan="5" style="padding:0 0 8px;">
               <details>
-                <summary class="btn secondary small" style="display:inline-block;cursor:pointer;">Ver desglose por importación (${r.porImportacion.length})</summary>
+                <summary class="btn secondary small" style="display:inline-block;cursor:pointer;">Ver importación${r.porImportacion.length>1?'es':''} (${r.porImportacion.length})</summary>
                 <table style="margin-top:6px;">
                   <thead><tr><th>Importación</th><th class="num">Facturado (USD)</th><th class="num">Anticipado (USD)</th><th class="num">Saldo (USD)</th><th class="num">Gastos (COP)</th></tr></thead>
                   <tbody>${detalleRows}</tbody>
